@@ -443,12 +443,21 @@ pub fn pomo_start(conn: &Connection, todo_id: Option<i64>, kind: &str) -> rusqli
     Ok(conn.last_insert_rowid())
 }
 
-pub fn pomo_finish(conn: &Connection, id: i64, completed: bool) -> rusqlite::Result<()> {
+pub fn pomo_finish_at(
+    conn: &Connection,
+    id: i64,
+    completed: bool,
+    ended_at: chrono::DateTime<chrono::Utc>,
+) -> rusqlite::Result<()> {
     conn.execute(
         "UPDATE pomodoros SET ended_at = ?1, completed = ?2 WHERE id = ?3",
-        params![chrono::Utc::now().to_rfc3339(), completed as i64, id],
+        params![ended_at.to_rfc3339(), completed as i64, id],
     )?;
     Ok(())
+}
+
+pub fn pomo_finish(conn: &Connection, id: i64, completed: bool) -> rusqlite::Result<()> {
+    pomo_finish_at(conn, id, completed, chrono::Utc::now())
 }
 
 /// Returns the one pomodoro session left running when the app was last closed
@@ -859,7 +868,7 @@ mod tests {
         let id = todo_add(&c, &new_todo("t1")).unwrap();
         todo_add(&c, &new_todo("t2")).unwrap();
         todo_complete(&c, id, d("2026-07-15")).unwrap();
-        let today = chrono::Utc::now().date_naive();
+        let today = chrono::Local::now().date_naive();
         let v = stat_todo_velocity(&c, today - chrono::Duration::days(7)).unwrap();
         let row = v
             .iter()
@@ -907,5 +916,22 @@ mod tests {
             habit_toggle(&c, 1, d(day)).unwrap();
         }
         assert_eq!(habit_best_streak(&c, 1).unwrap(), 3);
+    }
+
+    #[test]
+    fn pomo_finish_at_stores_supplied_timestamp() {
+        use chrono::TimeZone;
+        let c = test_conn();
+        let _id = pomo_start(&c, None, "focus").unwrap();
+        let fixed_end = chrono::Utc
+            .with_ymd_and_hms(2026, 7, 15, 15, 30, 45)
+            .unwrap();
+        pomo_finish_at(&c, 1, true, fixed_end).unwrap();
+        let ended_at: String = c
+            .query_row("SELECT ended_at FROM pomodoros WHERE id = 1", [], |r| {
+                r.get(0)
+            })
+            .unwrap();
+        assert_eq!(ended_at, fixed_end.to_rfc3339());
     }
 }

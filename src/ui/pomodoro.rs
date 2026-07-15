@@ -73,8 +73,8 @@ pub fn restore_dangling(app: &mut App) {
         Kind::Break
     };
     let Ok(started_at) = started_at.parse::<DateTime<Utc>>() else {
-        // Can't trust an unparseable timestamp — close the session out rather than panic.
-        let _ = crate::db::pomo_finish(&app.conn, id, true);
+        // Can't trust an unparseable timestamp — close the session out as incomplete.
+        let _ = crate::db::pomo_finish(&app.conn, id, false);
         return;
     };
     let minutes = match kind {
@@ -94,7 +94,7 @@ pub fn restore_dangling(app: &mut App) {
             paused_at: None,
         });
     } else {
-        let _ = crate::db::pomo_finish(&app.conn, id, true);
+        let _ = crate::db::pomo_finish_at(&app.conn, id, true, started_at + duration);
     }
 }
 
