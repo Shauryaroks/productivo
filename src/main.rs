@@ -1,5 +1,7 @@
 mod app;
 mod config;
+mod db;
+mod models;
 mod theme;
 mod ui;
 
@@ -9,8 +11,13 @@ use crossterm::event::{self, Event, KeyEventKind};
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let (config, warn) = config::load();
-    // Temporary in-memory DB until Task 2 adds db::open().
-    let conn = rusqlite::Connection::open_in_memory()?;
+    let conn = match db::open() {
+        Ok(c) => c,
+        Err(e) => {
+            eprintln!("productivo: cannot open database: {e}");
+            std::process::exit(1);
+        }
+    };
     let mut app = app::App::new(conn, config, warn);
 
     let mut terminal = ratatui::init(); // installs panic hook that restores the terminal
