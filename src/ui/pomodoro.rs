@@ -77,8 +77,16 @@ fn start_session(app: &mut App, kind: Kind, minutes: u64, todo_id: Option<i64>, 
 
 /// Starts a Focus session, optionally linked to a todo. Callable from todos.rs.
 pub fn start(app: &mut App, todo_id: Option<i64>, todo_title: Option<String>) {
+    // Guard against overwriting an active session
+    if app.pomodoro.active.is_some() {
+        app.status = Some("a session is already running — x to abandon it first".into());
+        return;
+    }
     let minutes = app.config.pomodoro.focus_min;
-    start_session(app, Kind::Focus, minutes, todo_id, todo_title);
+    start_session(app, Kind::Focus, minutes, todo_id, todo_title.clone());
+    // Set status message on success
+    let title_str = todo_title.unwrap_or_else(|| "focus".to_string());
+    app.status = Some(format!("⏱ pomodoro started: {title_str}"));
 }
 
 pub fn handle_key(app: &mut App, key: KeyEvent) {
@@ -127,7 +135,7 @@ pub fn on_tick(app: &mut App) {
         Kind::Focus => {
             app.pomodoro.today_count = crate::db::pomo_count_today(&app.conn, app.today).unwrap_or(0);
             app.pomodoro.suggest_break = true;
-            app.status = Some("focus done — s starts a 5m break".into());
+            app.status = Some(format!("focus done — s starts a {}m break", app.config.pomodoro.break_min).into());
         }
         Kind::Break => {
             app.status = Some("break over — s starts focus".into());

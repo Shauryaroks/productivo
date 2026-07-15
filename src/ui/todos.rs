@@ -165,8 +165,7 @@ pub fn handle_key(app: &mut App, key: KeyEvent) {
                 let row = &app.todos.items[app.todos.selected];
                 (row.todo.id, row.todo.title.clone())
             };
-            crate::ui::pomodoro::start(app, Some(id), Some(title.clone()));
-            app.status = Some(format!("⏱ pomodoro started: {title}"));
+            crate::ui::pomodoro::start(app, Some(id), Some(title));
         }
         _ => {}
     }
