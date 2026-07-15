@@ -22,6 +22,7 @@ pub struct App {
     pub today: NaiveDate,
     pub status: Option<String>,
     pub habits: crate::ui::habits::HabitsState,
+    pub todos: crate::ui::todos::TodosState,
 }
 
 pub fn screen_for(panel: &str) -> Screen {
@@ -49,8 +50,10 @@ impl App {
             today: Local::now().date_naive(),
             status,
             habits: crate::ui::habits::HabitsState::default(),
+            todos: crate::ui::todos::TodosState::default(),
         };
         s.habits.load(&s.conn, s.today);
+        s.todos.load(&s.conn);
         s
     }
 
@@ -61,6 +64,7 @@ impl App {
         if self.mode == InputMode::Editing {
             match self.screen {
                 Screen::Habits => crate::ui::habits::handle_key(self, key),
+                Screen::Todos => crate::ui::todos::handle_key(self, key),
                 _ => {}
             }
             return;
@@ -112,6 +116,7 @@ impl App {
 
         match self.screen {
             Screen::Habits => crate::ui::habits::handle_key(self, key),
+            Screen::Todos => crate::ui::todos::handle_key(self, key),
             _ => {}
         }
     }
