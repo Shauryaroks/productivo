@@ -99,7 +99,7 @@ config directory as `config.toml`:
 |----------|------|
 | Linux    | `~/.config/productivo/config.toml` |
 | macOS    | `~/Library/Application Support/productivo/config.toml` |
-| Windows  | `%APPDATA%\productivo\config.toml` |
+| Windows  | `%APPDATA%\productivo\config\config.toml` |
 
 It controls the home-panel order, pomodoro focus/break lengths, and theme
 color overrides (defaults to Catppuccin Mocha). Missing or invalid values
@@ -113,7 +113,7 @@ All data lives in a single SQLite file at the platform data directory:
 |----------|------|
 | Linux    | `~/.local/share/productivo/dash.db` |
 | macOS    | `~/Library/Application Support/productivo/dash.db` |
-| Windows  | `%APPDATA%\productivo\dash.db` |
+| Windows  | `%APPDATA%\productivo\data\dash.db` |
 
 Nothing leaves your machine.
 

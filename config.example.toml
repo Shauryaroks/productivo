@@ -1,7 +1,7 @@
 # Copy to your config dir as config.toml:
 #   Linux:   ~/.config/productivo/config.toml
 #   macOS:   ~/Library/Application Support/productivo/config.toml
-#   Windows: %APPDATA%\productivo\config.toml
+#   Windows: %APPDATA%\productivo\config\config.toml
 
 # Home-screen panel order: first three fill the left column top-to-bottom,
 # next three fill the right column.
