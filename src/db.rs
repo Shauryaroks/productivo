@@ -112,17 +112,32 @@ pub fn habit_archive(conn: &Connection, id: i64) -> rusqlite::Result<()> {
     Ok(())
 }
 
-pub fn habit_move(conn: &Connection, id: i64, delta: i64) -> rusqlite::Result<()> {
+pub fn habit_move(conn: &Connection, id: i64, delta: i64) -> rusqlite::Result<bool> {
     let pos: i64 = conn.query_row("SELECT position FROM habits WHERE id = ?1", [id], |r| r.get(0))?;
-    let target = pos + delta;
-    let neighbor: Option<i64> = conn
-        .query_row("SELECT id FROM habits WHERE position = ?1 AND archived = 0", [target], |r| r.get(0))
-        .ok();
-    if let Some(nid) = neighbor {
+    let neighbor: Option<(i64, i64)> = if delta > 0 {
+        conn.query_row(
+            "SELECT id, position FROM habits WHERE archived = 0 AND position > ?1 ORDER BY position LIMIT 1",
+            [pos],
+            |r| Ok((r.get(0)?, r.get(1)?)),
+        )
+        .ok()
+    } else if delta < 0 {
+        conn.query_row(
+            "SELECT id, position FROM habits WHERE archived = 0 AND position < ?1 ORDER BY position DESC LIMIT 1",
+            [pos],
+            |r| Ok((r.get(0)?, r.get(1)?)),
+        )
+        .ok()
+    } else {
+        None
+    };
+    if let Some((nid, npos)) = neighbor {
+        conn.execute("UPDATE habits SET position = ?1 WHERE id = ?2", params![npos, id])?;
         conn.execute("UPDATE habits SET position = ?1 WHERE id = ?2", params![pos, nid])?;
-        conn.execute("UPDATE habits SET position = ?1 WHERE id = ?2", params![target, id])?;
+        Ok(true)
+    } else {
+        Ok(false)
     }
-    Ok(())
 }
 
 pub fn habit_toggle(conn: &Connection, id: i64, date: NaiveDate) -> rusqlite::Result<()> {
@@ -206,6 +221,25 @@ mod tests {
         assert_eq!(habit_checked_on(&c, d("2026-07-15")).unwrap(), vec![1]);
         habit_toggle(&c, 1, d("2026-07-15")).unwrap();
         assert!(habit_checked_on(&c, d("2026-07-15")).unwrap().is_empty());
+    }
+
+    #[test]
+    fn habit_move_swaps_with_adjacent_unarchived_across_gaps() {
+        let c = test_conn();
+        habit_add(&c, "one").unwrap();
+        habit_add(&c, "two").unwrap();
+        habit_add(&c, "three").unwrap();
+        habit_archive(&c, 2).unwrap();
+
+        let moved = habit_move(&c, 3, -1).unwrap();
+        assert!(moved);
+        let names: Vec<i64> = habits_list(&c).unwrap().iter().map(|h| h.id).collect();
+        assert_eq!(names, vec![3, 1]);
+
+        let moved_again = habit_move(&c, 3, -1).unwrap();
+        assert!(!moved_again);
+        let names_after: Vec<i64> = habits_list(&c).unwrap().iter().map(|h| h.id).collect();
+        assert_eq!(names_after, vec![3, 1]);
     }
 
     #[test]

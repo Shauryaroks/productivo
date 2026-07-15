@@ -84,13 +84,17 @@ pub fn handle_key(app: &mut App, key: KeyEvent) {
             app.habits.load(&app.conn, today);
         }
         KeyCode::Char('K') if n > 0 => {
-            let _ = db::habit_move(&app.conn, app.habits.items[app.habits.selected].id, -1);
-            app.habits.selected = app.habits.selected.saturating_sub(1);
+            let id = app.habits.items[app.habits.selected].id;
+            if db::habit_move(&app.conn, id, -1).unwrap_or(false) {
+                app.habits.selected = app.habits.selected.saturating_sub(1);
+            }
             app.habits.load(&app.conn, today);
         }
         KeyCode::Char('J') if n > 0 => {
-            let _ = db::habit_move(&app.conn, app.habits.items[app.habits.selected].id, 1);
-            app.habits.selected = (app.habits.selected + 1).min(n - 1);
+            let id = app.habits.items[app.habits.selected].id;
+            if db::habit_move(&app.conn, id, 1).unwrap_or(false) {
+                app.habits.selected = (app.habits.selected + 1).min(n - 1);
+            }
             app.habits.load(&app.conn, today);
         }
         // y toggles viewing yesterday (spec: yesterday editable, nothing older)

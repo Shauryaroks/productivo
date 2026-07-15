@@ -69,11 +69,16 @@ impl App {
         // Global keys (Normal mode only)
         match key.code {
             KeyCode::Char('q') => { self.should_quit = true; return; }
-            KeyCode::Esc => { self.screen = Screen::Home; return; }
+            KeyCode::Esc => {
+                self.reset_habits_day_if_leaving();
+                self.screen = Screen::Home;
+                return;
+            }
             KeyCode::Char(c @ '1'..='6') => {
                 let idx = c as usize - '1' as usize;
-                if let Some(p) = self.config.panels.get(idx) {
-                    self.screen = screen_for(p);
+                if let Some(p) = self.config.panels.get(idx).cloned() {
+                    self.reset_habits_day_if_leaving();
+                    self.screen = screen_for(&p);
                 }
                 return;
             }
@@ -108,6 +113,13 @@ impl App {
         match self.screen {
             Screen::Habits => crate::ui::habits::handle_key(self, key),
             _ => {}
+        }
+    }
+
+    fn reset_habits_day_if_leaving(&mut self) {
+        if self.screen == Screen::Habits && self.habits.day.is_some() {
+            self.habits.day = None;
+            self.habits.load(&self.conn, self.today);
         }
     }
 
