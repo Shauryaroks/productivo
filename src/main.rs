@@ -2,6 +2,7 @@ mod app;
 mod config;
 mod db;
 mod models;
+mod recur;
 mod theme;
 mod ui;
 
