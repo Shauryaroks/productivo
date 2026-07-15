@@ -4,7 +4,7 @@ use rusqlite::Connection;
 use std::error::Error;
 use std::fmt;
 
-use crate::models::{Habit, Todo};
+use crate::models::{Event, Habit, Todo};
 use crate::recur;
 
 pub struct NewTodo {
@@ -294,6 +294,46 @@ pub fn todo_delete(conn: &Connection, id: i64) -> rusqlite::Result<()> {
     Ok(())
 }
 
+pub fn event_add(
+    conn: &Connection, title: &str, date: NaiveDate,
+    time: Option<&str>, category: &str, color: &str,
+) -> rusqlite::Result<()> {
+    conn.execute(
+        "INSERT INTO events (title, date, time, category, color) VALUES (?1, ?2, ?3, ?4, ?5)",
+        params![title, date.to_string(), time, category, color],
+    )?;
+    Ok(())
+}
+
+pub fn event_delete(conn: &Connection, id: i64) -> rusqlite::Result<()> {
+    conn.execute("DELETE FROM events WHERE id = ?1", [id])?;
+    Ok(())
+}
+
+pub fn events_between(conn: &Connection, start: NaiveDate, end: NaiveDate) -> rusqlite::Result<Vec<Event>> {
+    let mut stmt = conn.prepare(
+        "SELECT id, title, date, time, category, color, notes FROM events
+         WHERE date >= ?1 AND date <= ?2 ORDER BY date, time",
+    )?;
+    let rows = stmt.query_map(params![start.to_string(), end.to_string()], |r| {
+        Ok(Event {
+            id: r.get(0)?, title: r.get(1)?,
+            date: r.get::<_, String>(2)?.parse().unwrap(),
+            time: r.get(3)?, category: r.get(4)?, color: r.get(5)?, notes: r.get(6)?,
+        })
+    })?;
+    rows.collect()
+}
+
+pub fn todos_due_between(conn: &Connection, start: NaiveDate, end: NaiveDate) -> rusqlite::Result<Vec<Todo>> {
+    let mut stmt = conn.prepare(&format!(
+        "SELECT {TODO_COLS} FROM todos
+         WHERE done_at IS NULL AND due_date >= ?1 AND due_date <= ?2 ORDER BY due_date"
+    ))?;
+    let rows = stmt.query_map(params![start.to_string(), end.to_string()], |r| row_to_todo(r))?;
+    rows.collect()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -427,5 +467,28 @@ mod tests {
         assert_eq!(open_subtask_count(&c, parent).unwrap(), (0, 1));
         todo_delete(&c, parent).unwrap();
         assert!(subtasks_of(&c, parent).unwrap().is_empty());
+    }
+
+    #[test]
+    fn events_between_is_inclusive_and_sorted() {
+        let c = test_conn();
+        event_add(&c, "b", d("2026-07-20"), None, "work", "blue").unwrap();
+        event_add(&c, "a", d("2026-07-15"), Some("09:00"), "health", "peach").unwrap();
+        event_add(&c, "outside", d("2026-08-01"), None, "work", "blue").unwrap();
+        let ev = events_between(&c, d("2026-07-15"), d("2026-07-31")).unwrap();
+        assert_eq!(ev.iter().map(|e| e.title.as_str()).collect::<Vec<_>>(), vec!["a", "b"]);
+    }
+
+    #[test]
+    fn todos_due_between_only_open() {
+        let c = test_conn();
+        let mut t = new_todo("due in range"); t.due_date = Some(d("2026-07-16"));
+        let id = todo_add(&c, &t).unwrap();
+        let mut t2 = new_todo("done in range"); t2.due_date = Some(d("2026-07-17"));
+        let id2 = todo_add(&c, &t2).unwrap();
+        todo_complete(&c, id2, d("2026-07-15")).unwrap();
+        let due = todos_due_between(&c, d("2026-07-15"), d("2026-07-21")).unwrap();
+        assert_eq!(due.len(), 1);
+        assert_eq!(due[0].id, id);
     }
 }

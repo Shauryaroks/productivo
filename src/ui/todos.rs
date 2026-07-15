@@ -127,16 +127,19 @@ pub fn handle_key(app: &mut App, key: KeyEvent) {
                 }
             }
             app.todos.load(&app.conn);
+            app.calendar.load(&app.conn);
         }
         KeyCode::Char('u') => {
             if let Some(id) = app.todos.last_completed.take() {
                 let _ = db::todo_uncomplete(&app.conn, id);
                 app.todos.load(&app.conn);
+                app.calendar.load(&app.conn);
             }
         }
         KeyCode::Char('d') if n > 0 => {
             let _ = db::todo_delete(&app.conn, app.todos.items[app.todos.selected].todo.id);
             app.todos.load(&app.conn);
+            app.calendar.load(&app.conn);
         }
         KeyCode::Char('a') => open_form(app, None, None),
         KeyCode::Char('A') if n > 0 => {
@@ -245,6 +248,7 @@ fn form_key(app: &mut App, key: KeyEvent) {
             app.todos.form = None;
             app.mode = InputMode::Normal;
             app.todos.load(&app.conn);
+            app.calendar.load(&app.conn);
         }
         KeyCode::Char(c) if form.focus != 2 => form.fields[form.focus].push(c),
         _ => {}

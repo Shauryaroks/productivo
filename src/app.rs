@@ -23,6 +23,7 @@ pub struct App {
     pub status: Option<String>,
     pub habits: crate::ui::habits::HabitsState,
     pub todos: crate::ui::todos::TodosState,
+    pub calendar: crate::ui::calendar::CalendarState,
 }
 
 pub fn screen_for(panel: &str) -> Screen {
@@ -51,9 +52,11 @@ impl App {
             status,
             habits: crate::ui::habits::HabitsState::default(),
             todos: crate::ui::todos::TodosState::default(),
+            calendar: crate::ui::calendar::CalendarState::default(),
         };
         s.habits.load(&s.conn, s.today);
         s.todos.load(&s.conn);
+        s.calendar.load(&s.conn);
         s
     }
 
@@ -65,6 +68,7 @@ impl App {
             match self.screen {
                 Screen::Habits => crate::ui::habits::handle_key(self, key),
                 Screen::Todos => crate::ui::todos::handle_key(self, key),
+                Screen::Calendar => crate::ui::calendar::handle_key(self, key),
                 _ => {}
             }
             return;
@@ -117,6 +121,7 @@ impl App {
         match self.screen {
             Screen::Habits => crate::ui::habits::handle_key(self, key),
             Screen::Todos => crate::ui::todos::handle_key(self, key),
+            Screen::Calendar => crate::ui::calendar::handle_key(self, key),
             _ => {}
         }
     }

@@ -44,8 +44,11 @@ fn render_panel(f: &mut Frame, app: &mut App, panel: &str, area: Rect, focused: 
         crate::ui::todos::render_panel(f, app, area, focused);
         return;
     }
+    if panel == "calendar" {
+        crate::ui::calendar::render_panel(f, app, area, focused);
+        return;
+    }
     let title = match panel {
-        "calendar" => "CALENDAR",
         "ideas" => "IDEAS", "pomodoro" => "POMODORO", _ => "STATS",
     };
     let block = app.theme.panel_block(title, focused);
