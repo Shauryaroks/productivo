@@ -164,10 +164,12 @@ pub fn render_zoomed(f: &mut Frame, app: &mut App) {
     let block = app.theme.panel_block(&format!("HABITS — {day_label}"), true);
     f.render_widget(List::new(habit_lines(app, true)).block(block), rows[0]);
 
-    let hint = if let Some(buf) = &app.habits.input {
-        format!(" new habit: {buf}▏  (enter save · esc cancel)")
-    } else {
-        " space check · a add · d archive · J/K reorder · y yesterday · esc home ".into()
-    };
+    let hint = app.status.clone().unwrap_or_else(|| {
+        if let Some(buf) = &app.habits.input {
+            format!(" new habit: {buf}▏  (enter save · esc cancel)")
+        } else {
+            " space check · a add · d archive · J/K reorder · y yesterday · esc home ".into()
+        }
+    });
     f.render_widget(Paragraph::new(hint).style(app.theme.hint()), rows[1]);
 }

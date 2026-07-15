@@ -317,11 +317,13 @@ pub fn render_zoomed(f: &mut Frame, app: &mut App) {
         .collect();
     f.render_widget(List::new(items).block(block), rows[0]);
 
-    let hint = if app.todos.filter_editing {
-        format!(" filter: {}▏  (enter apply · esc clear)", app.todos.filter.as_deref().unwrap_or(""))
-    } else {
-        " a add · A subtask · e edit · space done · u undo · d delete · enter expand · / filter · g group · p pomodoro · esc home ".into()
-    };
+    let hint = app.status.clone().unwrap_or_else(|| {
+        if app.todos.filter_editing {
+            format!(" filter: {}▏  (enter apply · esc clear)", app.todos.filter.as_deref().unwrap_or(""))
+        } else {
+            " a add · A subtask · e edit · space done · u undo · d delete · enter expand · / filter · g group · p pomodoro · esc home ".into()
+        }
+    });
     f.render_widget(Paragraph::new(hint).style(app.theme.hint()), rows[1]);
 
     if app.todos.form.is_some() {

@@ -239,7 +239,9 @@ pub fn render_zoomed(f: &mut Frame, app: &mut App) {
         cols[1],
     );
 
-    let hint = " ←↓↑→ move · [/] month · t today · a add event · d delete · esc home ";
+    let hint = app.status.clone().unwrap_or_else(|| {
+        " ←↓↑→ move · [/] month · t today · a add event · d delete · esc home ".into()
+    });
     f.render_widget(Paragraph::new(hint).style(app.theme.hint()), rows[1]);
 
     if app.calendar.form.is_some() {
