@@ -4,7 +4,19 @@ use rusqlite::Connection;
 use std::error::Error;
 use std::fmt;
 
-use crate::models::Habit;
+use crate::models::{Habit, Todo};
+use crate::recur;
+
+pub struct NewTodo {
+    pub title: String,
+    pub notes: String,
+    pub priority: u8,
+    pub due_date: Option<NaiveDate>,
+    pub project: Option<String>,
+    pub tags: String,
+    pub parent_id: Option<i64>,
+    pub recur_rule: Option<String>,
+}
 
 #[derive(Debug)]
 struct SimpleError(&'static str);
@@ -183,6 +195,105 @@ pub fn habit_streak(conn: &Connection, id: i64, today: NaiveDate) -> rusqlite::R
     Ok(streak)
 }
 
+fn row_to_todo(r: &rusqlite::Row) -> rusqlite::Result<Todo> {
+    Ok(Todo {
+        id: r.get(0)?,
+        title: r.get(1)?,
+        notes: r.get(2)?,
+        priority: r.get::<_, i64>(3)? as u8,
+        due_date: r.get::<_, Option<String>>(4)?.and_then(|s| s.parse().ok()),
+        project: r.get(5)?,
+        tags: r.get(6)?,
+        parent_id: r.get(7)?,
+        recur_rule: r.get(8)?,
+        done_at: r.get(9)?,
+        created_at: r.get(10)?,
+    })
+}
+
+const TODO_COLS: &str =
+    "id, title, notes, priority, due_date, project, tags, parent_id, recur_rule, done_at, created_at";
+
+pub fn todo_add(conn: &Connection, t: &NewTodo) -> rusqlite::Result<i64> {
+    conn.execute(
+        "INSERT INTO todos (title, notes, priority, due_date, project, tags, parent_id, recur_rule, created_at)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)",
+        params![
+            t.title, t.notes, t.priority as i64,
+            t.due_date.map(|d| d.to_string()), t.project, t.tags,
+            t.parent_id, t.recur_rule, chrono::Utc::now().to_rfc3339()
+        ],
+    )?;
+    Ok(conn.last_insert_rowid())
+}
+
+pub fn todo_update(conn: &Connection, id: i64, t: &NewTodo) -> rusqlite::Result<()> {
+    conn.execute(
+        "UPDATE todos SET title=?1, notes=?2, priority=?3, due_date=?4, project=?5, tags=?6, recur_rule=?7
+         WHERE id=?8",
+        params![
+            t.title, t.notes, t.priority as i64,
+            t.due_date.map(|d| d.to_string()), t.project, t.tags, t.recur_rule, id
+        ],
+    )?;
+    Ok(())
+}
+
+pub fn todos_open(conn: &Connection) -> rusqlite::Result<Vec<Todo>> {
+    let mut stmt = conn.prepare(&format!(
+        "SELECT {TODO_COLS} FROM todos
+         WHERE done_at IS NULL AND parent_id IS NULL
+         ORDER BY due_date IS NULL, due_date, priority DESC, created_at"
+    ))?;
+    let rows = stmt.query_map([], |r| row_to_todo(r))?;
+    rows.collect()
+}
+
+pub fn subtasks_of(conn: &Connection, parent_id: i64) -> rusqlite::Result<Vec<Todo>> {
+    let mut stmt = conn.prepare(&format!(
+        "SELECT {TODO_COLS} FROM todos WHERE parent_id = ?1 ORDER BY done_at IS NOT NULL, created_at"
+    ))?;
+    let rows = stmt.query_map([parent_id], |r| row_to_todo(r))?;
+    rows.collect()
+}
+
+pub fn open_subtask_count(conn: &Connection, parent_id: i64) -> rusqlite::Result<(i64, i64)> {
+    conn.query_row(
+        "SELECT COALESCE(SUM(done_at IS NULL), 0), COUNT(*) FROM todos WHERE parent_id = ?1",
+        [parent_id],
+        |r| Ok((r.get(0)?, r.get(1)?)),
+    )
+}
+
+pub fn todo_complete(conn: &Connection, id: i64, today: NaiveDate) -> rusqlite::Result<()> {
+    conn.execute(
+        "UPDATE todos SET done_at = ?1 WHERE id = ?2",
+        params![chrono::Utc::now().to_rfc3339(), id],
+    )?;
+    let mut stmt = conn.prepare(&format!("SELECT {TODO_COLS} FROM todos WHERE id = ?1"))?;
+    let t = stmt.query_row([id], |r| row_to_todo(r))?;
+    if let Some(rule) = t.recur_rule.as_deref().and_then(recur::parse) {
+        let next = NewTodo {
+            title: t.title, notes: t.notes, priority: t.priority,
+            due_date: Some(recur::next_after(&rule, today)),
+            project: t.project, tags: t.tags, parent_id: None,
+            recur_rule: t.recur_rule.clone(),
+        };
+        todo_add(conn, &next)?;
+    }
+    Ok(())
+}
+
+pub fn todo_uncomplete(conn: &Connection, id: i64) -> rusqlite::Result<()> {
+    conn.execute("UPDATE todos SET done_at = NULL WHERE id = ?1", [id])?;
+    Ok(())
+}
+
+pub fn todo_delete(conn: &Connection, id: i64) -> rusqlite::Result<()> {
+    conn.execute("DELETE FROM todos WHERE id = ?1", [id])?;
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -255,5 +366,66 @@ mod tests {
         assert_eq!(habit_streak(&c, 1, d("2026-07-15")).unwrap(), 4);
         // gap breaks the streak
         assert_eq!(habit_streak(&c, 1, d("2026-07-18")).unwrap(), 0);
+    }
+
+    fn new_todo(title: &str) -> NewTodo {
+        NewTodo {
+            title: title.into(), notes: String::new(), priority: 0,
+            due_date: None, project: None, tags: String::new(),
+            parent_id: None, recur_rule: None,
+        }
+    }
+
+    #[test]
+    fn todo_complete_recurring_spawns_next_occurrence() {
+        let c = test_conn();
+        let mut t = new_todo("water plants");
+        t.recur_rule = Some("every:3d".into());
+        t.due_date = Some(d("2026-07-15"));
+        let id = todo_add(&c, &t).unwrap();
+        todo_complete(&c, id, d("2026-07-15")).unwrap();
+
+        let open = todos_open(&c).unwrap();
+        assert_eq!(open.len(), 1, "next occurrence should exist");
+        assert_eq!(open[0].due_date, Some(d("2026-07-18")));
+        assert_eq!(open[0].recur_rule.as_deref(), Some("every:3d"));
+        assert!(open[0].id != id);
+    }
+
+    #[test]
+    fn todo_complete_non_recurring_just_closes() {
+        let c = test_conn();
+        let id = todo_add(&c, &new_todo("one-off")).unwrap();
+        todo_complete(&c, id, d("2026-07-15")).unwrap();
+        assert!(todos_open(&c).unwrap().is_empty());
+        todo_uncomplete(&c, id).unwrap();
+        assert_eq!(todos_open(&c).unwrap().len(), 1);
+    }
+
+    #[test]
+    fn todos_open_orders_overdue_then_due_then_priority() {
+        let c = test_conn();
+        let mut a = new_todo("low no-due"); a.priority = 0;
+        let mut b = new_todo("high no-due"); b.priority = 2;
+        let mut o = new_todo("overdue"); o.due_date = Some(d("2026-07-01"));
+        todo_add(&c, &a).unwrap();
+        todo_add(&c, &b).unwrap();
+        todo_add(&c, &o).unwrap();
+        let titles: Vec<_> = todos_open(&c).unwrap().into_iter().map(|t| t.title).collect();
+        assert_eq!(titles, vec!["overdue", "high no-due", "low no-due"]);
+    }
+
+    #[test]
+    fn subtasks_cascade_and_count() {
+        let c = test_conn();
+        let parent = todo_add(&c, &new_todo("parent")).unwrap();
+        let mut sub = new_todo("child");
+        sub.parent_id = Some(parent);
+        let sid = todo_add(&c, &sub).unwrap();
+        assert_eq!(open_subtask_count(&c, parent).unwrap(), (1, 1));
+        todo_complete(&c, sid, d("2026-07-15")).unwrap();
+        assert_eq!(open_subtask_count(&c, parent).unwrap(), (0, 1));
+        todo_delete(&c, parent).unwrap();
+        assert!(subtasks_of(&c, parent).unwrap().is_empty());
     }
 }
