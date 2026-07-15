@@ -1,9 +1,22 @@
 use rusqlite::Connection;
+use std::error::Error;
+use std::fmt;
 
-pub fn open() -> rusqlite::Result<Connection> {
+#[derive(Debug)]
+struct SimpleError(&'static str);
+
+impl fmt::Display for SimpleError {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "{}", self.0)
+    }
+}
+
+impl Error for SimpleError {}
+
+pub fn open() -> Result<Connection, Box<dyn Error>> {
     let dirs = directories::ProjectDirs::from("", "", "productivo")
-        .expect("no home directory found");
-    std::fs::create_dir_all(dirs.data_dir()).expect("cannot create data dir");
+        .ok_or_else(|| Box::new(SimpleError("no home directory found")) as Box<dyn Error>)?;
+    std::fs::create_dir_all(dirs.data_dir())?;
     let conn = Connection::open(dirs.data_dir().join("dash.db"))?;
     conn.execute_batch("PRAGMA foreign_keys = ON;")?;
     migrate(&conn)?;
