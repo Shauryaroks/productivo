@@ -56,10 +56,8 @@ fn render_panel(f: &mut Frame, app: &mut App, panel: &str, area: Rect, focused: 
         crate::ui::pomodoro::render_panel(f, app, area, focused);
         return;
     }
-    let block = app.theme.panel_block("STATS", focused);
-    // Module panel body replaces this placeholder in Task 10.
-    f.render_widget(
-        Paragraph::new("…").style(Style::default().fg(app.theme.muted)).block(block),
-        area,
-    );
+    // "stats" and any unrecognized panel name land here — matches screen_for's fallback to
+    // Screen::Stats, so an unknown config entry still renders something instead of a dead
+    // placeholder.
+    crate::ui::stats::render_panel(f, app, area, focused);
 }

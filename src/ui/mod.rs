@@ -3,6 +3,7 @@ pub mod habits;
 pub mod home;
 pub mod ideas;
 pub mod pomodoro;
+pub mod stats;
 pub mod todos;
 
 use ratatui::Frame;
@@ -17,7 +18,6 @@ pub fn render(f: &mut Frame, app: &mut App) {
         Screen::Calendar => calendar::render_zoomed(f, app),
         Screen::Ideas => ideas::render_zoomed(f, app),
         Screen::Pomodoro => pomodoro::render_zoomed(f, app),
-        // Remaining zoomed module screens land in Task 10; until then everything is Home.
-        _ => home::render(f, app),
+        Screen::Stats => stats::render_zoomed(f, app),
     }
 }

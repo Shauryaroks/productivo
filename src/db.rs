@@ -398,6 +398,107 @@ pub fn pomo_count_today(conn: &Connection, date: NaiveDate) -> rusqlite::Result<
     )
 }
 
+pub fn habit_best_streak(conn: &Connection, id: i64) -> rusqlite::Result<u32> {
+    let mut stmt = conn.prepare("SELECT date FROM habit_log WHERE habit_id = ?1 ORDER BY date ASC")?;
+    let dates: Vec<NaiveDate> = stmt
+        .query_map([id], |r| r.get::<_, String>(0))?
+        .filter_map(|s| s.ok().and_then(|s| s.parse().ok()))
+        .collect();
+    let mut best = 0u32;
+    let mut cur = 0u32;
+    let mut prev: Option<NaiveDate> = None;
+    for d in dates {
+        match prev {
+            Some(p) if p.succ_opt() == Some(d) => cur += 1,
+            _ => cur = 1,
+        }
+        best = best.max(cur);
+        prev = Some(d);
+    }
+    Ok(best)
+}
+
+pub fn stat_habit_days(conn: &Connection, since: NaiveDate) -> rusqlite::Result<Vec<(NaiveDate, u32)>> {
+    let mut stmt = conn.prepare(
+        "SELECT date, COUNT(*) FROM habit_log WHERE date >= ?1 GROUP BY date ORDER BY date",
+    )?;
+    let rows = stmt.query_map([since.to_string()], |r| {
+        Ok((r.get::<_, String>(0)?, r.get::<_, u32>(1)?))
+    })?;
+    Ok(rows.filter_map(|r| r.ok())
+        .filter_map(|(s, n)| s.parse().ok().map(|dt| (dt, n)))
+        .collect())
+}
+
+pub fn stat_todo_velocity(conn: &Connection, since: NaiveDate) -> rusqlite::Result<Vec<(NaiveDate, u32, u32)>> {
+    let mut stmt = conn.prepare(
+        "SELECT day, SUM(created), SUM(completed) FROM (
+            SELECT date(created_at) AS day, 1 AS created, 0 AS completed FROM todos WHERE date(created_at) >= ?1
+            UNION ALL
+            SELECT date(done_at) AS day, 0, 1 FROM todos WHERE done_at IS NOT NULL AND date(done_at) >= ?1
+         ) GROUP BY day ORDER BY day",
+    )?;
+    let rows = stmt.query_map([since.to_string()], |r| {
+        Ok((r.get::<_, String>(0)?, r.get::<_, u32>(1)?, r.get::<_, u32>(2)?))
+    })?;
+    Ok(rows.filter_map(|r| r.ok())
+        .filter_map(|(s, a, b)| s.parse().ok().map(|dt| (dt, a, b)))
+        .collect())
+}
+
+pub fn stat_focus_minutes(conn: &Connection, since: NaiveDate) -> rusqlite::Result<Vec<(NaiveDate, u32)>> {
+    let mut stmt = conn.prepare(
+        "SELECT date(started_at),
+                CAST(SUM((julianday(ended_at) - julianday(started_at)) * 1440) AS INTEGER)
+         FROM pomodoros
+         WHERE kind = 'focus' AND completed = 1 AND ended_at IS NOT NULL AND date(started_at) >= ?1
+         GROUP BY date(started_at) ORDER BY date(started_at)",
+    )?;
+    let rows = stmt.query_map([since.to_string()], |r| {
+        Ok((r.get::<_, String>(0)?, r.get::<_, u32>(1)?))
+    })?;
+    Ok(rows.filter_map(|r| r.ok())
+        .filter_map(|(s, n)| s.parse().ok().map(|dt| (dt, n)))
+        .collect())
+}
+
+pub fn stat_focus_by_project(conn: &Connection, since: NaiveDate) -> rusqlite::Result<Vec<(String, u32)>> {
+    let mut stmt = conn.prepare(
+        "SELECT COALESCE(t.project, '(none)') AS proj,
+                CAST(SUM((julianday(p.ended_at) - julianday(p.started_at)) * 1440) AS INTEGER) AS mins
+         FROM pomodoros p LEFT JOIN todos t ON t.id = p.todo_id
+         WHERE p.kind = 'focus' AND p.completed = 1 AND p.ended_at IS NOT NULL AND date(p.started_at) >= ?1
+         GROUP BY proj ORDER BY mins DESC",
+    )?;
+    let rows = stmt.query_map([since.to_string()], |r| Ok((r.get(0)?, r.get(1)?)))?;
+    rows.collect()
+}
+
+pub struct WeekStats {
+    pub habit_pct: u32,
+    pub todos_done: u32,
+    pub focus_min: u32,
+}
+
+pub fn stat_week(conn: &Connection, week_start: NaiveDate) -> rusqlite::Result<WeekStats> {
+    let end = week_start + chrono::Duration::days(6);
+    let habit_count: u32 = conn.query_row(
+        "SELECT COUNT(*) FROM habits WHERE archived = 0", [], |r| r.get(0))?;
+    let checked: u32 = conn.query_row(
+        "SELECT COUNT(*) FROM habit_log WHERE date >= ?1 AND date <= ?2",
+        params![week_start.to_string(), end.to_string()], |r| r.get(0))?;
+    let habit_pct = if habit_count == 0 { 0 } else { checked * 100 / (habit_count * 7) };
+    let todos_done: u32 = conn.query_row(
+        "SELECT COUNT(*) FROM todos WHERE done_at IS NOT NULL AND date(done_at) >= ?1 AND date(done_at) <= ?2",
+        params![week_start.to_string(), end.to_string()], |r| r.get(0))?;
+    let focus_min: u32 = conn.query_row(
+        "SELECT COALESCE(CAST(SUM((julianday(ended_at) - julianday(started_at)) * 1440) AS INTEGER), 0)
+         FROM pomodoros WHERE kind = 'focus' AND completed = 1 AND ended_at IS NOT NULL
+           AND date(started_at) >= ?1 AND date(started_at) <= ?2",
+        params![week_start.to_string(), end.to_string()], |r| r.get(0))?;
+    Ok(WeekStats { habit_pct, todos_done, focus_min })
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -565,5 +666,51 @@ mod tests {
         let due = todos_due_between(&c, d("2026-07-15"), d("2026-07-21")).unwrap();
         assert_eq!(due.len(), 1);
         assert_eq!(due[0].id, id);
+    }
+
+    #[test]
+    fn stat_todo_velocity_buckets_by_day() {
+        let c = test_conn();
+        let id = todo_add(&c, &new_todo("t1")).unwrap();
+        todo_add(&c, &new_todo("t2")).unwrap();
+        todo_complete(&c, id, d("2026-07-15")).unwrap();
+        let today = chrono::Utc::now().date_naive();
+        let v = stat_todo_velocity(&c, today - chrono::Duration::days(7)).unwrap();
+        let row = v.iter().find(|(dt, _, _)| *dt == today).expect("today bucket");
+        assert_eq!((row.1, row.2), (2, 1)); // 2 created, 1 completed today
+    }
+
+    #[test]
+    fn stat_focus_by_project_joins_todo_project() {
+        let c = test_conn();
+        let mut t = new_todo("work task"); t.project = Some("acme".into());
+        let tid = todo_add(&c, &t).unwrap();
+        let pid = pomo_start(&c, Some(tid), "focus").unwrap();
+        pomo_finish(&c, pid, true).unwrap();
+        let by = stat_focus_by_project(&c, d("2020-01-01")).unwrap();
+        assert_eq!(by.len(), 1);
+        assert_eq!(by[0].0, "acme");
+    }
+
+    #[test]
+    fn stat_week_computes_habit_pct() {
+        let c = test_conn();
+        habit_add(&c, "gym").unwrap();
+        // check 7/7 days of the week starting 2026-07-13 (a Monday)
+        for i in 0..7 {
+            habit_toggle(&c, 1, d("2026-07-13") + chrono::Duration::days(i)).unwrap();
+        }
+        let w = stat_week(&c, d("2026-07-13")).unwrap();
+        assert_eq!(w.habit_pct, 100);
+    }
+
+    #[test]
+    fn habit_best_streak_finds_longest_run() {
+        let c = test_conn();
+        habit_add(&c, "gym").unwrap();
+        for day in ["2026-07-01", "2026-07-02", "2026-07-03", "2026-07-05", "2026-07-06"] {
+            habit_toggle(&c, 1, d(day)).unwrap();
+        }
+        assert_eq!(habit_best_streak(&c, 1).unwrap(), 3);
     }
 }

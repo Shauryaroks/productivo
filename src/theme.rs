@@ -15,6 +15,7 @@ pub struct Theme {
     pub yellow: Color,
     pub blue: Color,
     pub peach: Color,
+    pub heat: [Color; 4], // habit heatmap intensity ramp, 0 → max
 }
 
 impl Default for Theme {
@@ -31,6 +32,12 @@ impl Default for Theme {
             yellow: Color::Rgb(249, 226, 175),
             blue: Color::Rgb(137, 180, 250),
             peach: Color::Rgb(250, 179, 135),
+            heat: [
+                Color::Rgb(49, 50, 68),
+                Color::Rgb(87, 116, 84),
+                Color::Rgb(126, 171, 120),
+                Color::Rgb(166, 227, 161),
+            ],
         }
     }
 }

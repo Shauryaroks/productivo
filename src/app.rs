@@ -26,6 +26,7 @@ pub struct App {
     pub calendar: crate::ui::calendar::CalendarState,
     pub ideas: crate::ui::ideas::IdeasState,
     pub pomodoro: crate::ui::pomodoro::PomodoroState,
+    pub stats: crate::ui::stats::StatsState,
 }
 
 pub fn screen_for(panel: &str) -> Screen {
@@ -57,6 +58,7 @@ impl App {
             calendar: crate::ui::calendar::CalendarState::default(),
             ideas: crate::ui::ideas::IdeasState::default(),
             pomodoro: crate::ui::pomodoro::PomodoroState::default(),
+            stats: crate::ui::stats::StatsState::default(),
         };
         s.habits.load(&s.conn, s.today);
         s.todos.load(&s.conn);
@@ -131,6 +133,7 @@ impl App {
             Screen::Calendar => crate::ui::calendar::handle_key(self, key),
             Screen::Ideas => crate::ui::ideas::handle_key(self, key),
             Screen::Pomodoro => crate::ui::pomodoro::handle_key(self, key),
+            Screen::Stats => crate::ui::stats::handle_key(self, key),
             _ => {}
         }
     }
