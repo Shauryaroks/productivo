@@ -373,6 +373,31 @@ pub fn idea_delete(conn: &Connection, id: i64) -> rusqlite::Result<()> {
     Ok(())
 }
 
+pub fn pomo_start(conn: &Connection, todo_id: Option<i64>, kind: &str) -> rusqlite::Result<i64> {
+    conn.execute(
+        "INSERT INTO pomodoros (todo_id, started_at, kind) VALUES (?1, ?2, ?3)",
+        params![todo_id, chrono::Utc::now().to_rfc3339(), kind],
+    )?;
+    Ok(conn.last_insert_rowid())
+}
+
+pub fn pomo_finish(conn: &Connection, id: i64, completed: bool) -> rusqlite::Result<()> {
+    conn.execute(
+        "UPDATE pomodoros SET ended_at = ?1, completed = ?2 WHERE id = ?3",
+        params![chrono::Utc::now().to_rfc3339(), completed as i64, id],
+    )?;
+    Ok(())
+}
+
+pub fn pomo_count_today(conn: &Connection, date: NaiveDate) -> rusqlite::Result<u32> {
+    conn.query_row(
+        "SELECT COUNT(*) FROM pomodoros
+         WHERE kind = 'focus' AND completed = 1 AND date(started_at) = ?1",
+        [date.to_string()],
+        |r| r.get(0),
+    )
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

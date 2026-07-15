@@ -25,6 +25,7 @@ pub struct App {
     pub todos: crate::ui::todos::TodosState,
     pub calendar: crate::ui::calendar::CalendarState,
     pub ideas: crate::ui::ideas::IdeasState,
+    pub pomodoro: crate::ui::pomodoro::PomodoroState,
 }
 
 pub fn screen_for(panel: &str) -> Screen {
@@ -55,11 +56,13 @@ impl App {
             todos: crate::ui::todos::TodosState::default(),
             calendar: crate::ui::calendar::CalendarState::default(),
             ideas: crate::ui::ideas::IdeasState::default(),
+            pomodoro: crate::ui::pomodoro::PomodoroState::default(),
         };
         s.habits.load(&s.conn, s.today);
         s.todos.load(&s.conn);
         s.calendar.load(&s.conn);
         s.ideas.load(&s.conn);
+        s.pomodoro.load(&s.conn, s.today);
         s
     }
 
@@ -127,6 +130,7 @@ impl App {
             Screen::Todos => crate::ui::todos::handle_key(self, key),
             Screen::Calendar => crate::ui::calendar::handle_key(self, key),
             Screen::Ideas => crate::ui::ideas::handle_key(self, key),
+            Screen::Pomodoro => crate::ui::pomodoro::handle_key(self, key),
             _ => {}
         }
     }
@@ -139,11 +143,14 @@ impl App {
     }
 
     pub fn tick(&mut self) {
+        crate::ui::pomodoro::on_tick(self);
+
         let now = Local::now().date_naive();
         if now != self.today {
             self.today = now;
             self.habits.day = None;
             self.habits.load(&self.conn, self.today);
+            self.pomodoro.load(&self.conn, self.today);
         }
     }
 }

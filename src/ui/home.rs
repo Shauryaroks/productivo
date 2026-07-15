@@ -52,11 +52,12 @@ fn render_panel(f: &mut Frame, app: &mut App, panel: &str, area: Rect, focused: 
         crate::ui::ideas::render_panel(f, app, area, focused);
         return;
     }
-    let title = match panel {
-        "pomodoro" => "POMODORO", _ => "STATS",
-    };
-    let block = app.theme.panel_block(title, focused);
-    // Module panel bodies replace this placeholder in Tasks 4–10.
+    if panel == "pomodoro" {
+        crate::ui::pomodoro::render_panel(f, app, area, focused);
+        return;
+    }
+    let block = app.theme.panel_block("STATS", focused);
+    // Module panel body replaces this placeholder in Task 10.
     f.render_widget(
         Paragraph::new("…").style(Style::default().fg(app.theme.muted)).block(block),
         area,

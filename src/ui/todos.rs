@@ -160,6 +160,14 @@ pub fn handle_key(app: &mut App, key: KeyEvent) {
             app.todos.group_by_project = !app.todos.group_by_project;
             app.todos.load(&app.conn);
         }
+        KeyCode::Char('p') if n > 0 => {
+            let (id, title) = {
+                let row = &app.todos.items[app.todos.selected];
+                (row.todo.id, row.todo.title.clone())
+            };
+            crate::ui::pomodoro::start(app, Some(id), Some(title.clone()));
+            app.status = Some(format!("⏱ pomodoro started: {title}"));
+        }
         _ => {}
     }
 }
