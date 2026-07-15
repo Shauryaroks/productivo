@@ -45,6 +45,17 @@ impl Default for PomodoroCfg {
     }
 }
 
+/// Sanitize a loaded config: ensure panels is not empty.
+/// Returns (sanitized config, optional warning).
+fn sanitize(mut c: Config) -> (Config, Option<String>) {
+    if c.panels.is_empty() {
+        c.panels = Config::default().panels;
+        (c, Some("config.toml: panels empty, using default panel order".into()))
+    } else {
+        (c, None)
+    }
+}
+
 /// Load config from <config_dir>/config.toml; fall back to defaults on any failure.
 /// Returns (config, warning) — warning is shown in the status line.
 pub fn load() -> (Config, Option<String>) {
@@ -54,7 +65,7 @@ pub fn load() -> (Config, Option<String>) {
     let path = dirs.config_dir().join("config.toml");
     match std::fs::read_to_string(&path) {
         Ok(s) => match toml::from_str(&s) {
-            Ok(c) => (c, None),
+            Ok(c) => sanitize(c),
             Err(e) => (Config::default(), Some(format!("config.toml invalid, using defaults: {e}"))),
         },
         Err(_) => (Config::default(), None), // no file = defaults, not an error
@@ -78,5 +89,15 @@ mod tests {
         assert_eq!(c.panels, vec!["todos", "stats"]);
         assert_eq!(c.pomodoro.focus_min, 50);
         assert_eq!(c.pomodoro.break_min, 5);
+    }
+
+    #[test]
+    fn sanitize_empty_panels() {
+        let c: Config = toml::from_str("panels = []").unwrap();
+        assert_eq!(c.panels.len(), 0);
+        let (sanitized, warning) = sanitize(c);
+        assert_eq!(sanitized.panels.len(), 6);
+        assert_eq!(sanitized.panels, Config::default().panels);
+        assert_eq!(warning, Some("config.toml: panels empty, using default panel order".into()));
     }
 }
