@@ -12,6 +12,7 @@ pub struct Todo {
     pub parent_id: Option<i64>,
     pub recur_rule: Option<String>,
     pub done_at: Option<String>,
+    #[allow(dead_code)] // mirrors the `todos` table schema; not yet surfaced in the UI
     pub created_at: String,
 }
 
@@ -19,7 +20,11 @@ pub struct Todo {
 pub struct Habit {
     pub id: i64,
     pub name: String,
+    #[allow(dead_code)]
+    // mirrors the `habits` table schema; ordering is done in SQL, not on the struct
     pub position: i64,
+    #[allow(dead_code)]
+    // mirrors the `habits` table schema; filtering is done in SQL, not on the struct
     pub archived: bool,
 }
 
@@ -30,7 +35,10 @@ pub struct Event {
     pub date: NaiveDate,
     pub time: Option<String>,
     pub category: String,
+    #[allow(dead_code)]
+    // mirrors the `events` table schema; dot color is derived from category, not stored color
     pub color: String,
+    #[allow(dead_code)] // mirrors the `events` table schema; not yet surfaced in the UI
     pub notes: String,
 }
 

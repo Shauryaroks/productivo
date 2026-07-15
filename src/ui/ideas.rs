@@ -55,7 +55,9 @@ pub fn handle_key(app: &mut App, key: KeyEvent) {
                 app.ideas.input = None;
                 app.mode = InputMode::Normal;
             }
-            KeyCode::Backspace => { buf.pop(); }
+            KeyCode::Backspace => {
+                buf.pop();
+            }
             KeyCode::Char(c) => buf.push(c),
             _ => {}
         }
@@ -79,7 +81,9 @@ pub fn handle_key(app: &mut App, key: KeyEvent) {
                 app.ideas.body_edit = None;
                 app.mode = InputMode::Normal;
             }
-            KeyCode::Backspace => { buf.pop(); }
+            KeyCode::Backspace => {
+                buf.pop();
+            }
             KeyCode::Char(c) => buf.push(c),
             _ => {}
         }
@@ -166,8 +170,8 @@ pub fn render_zoomed(f: &mut Frame, app: &mut App) {
         area,
     );
     let rows = Layout::vertical([Constraint::Min(0), Constraint::Length(1)]).split(area);
-    let cols = Layout::horizontal([Constraint::Percentage(60), Constraint::Percentage(40)])
-        .split(rows[0]);
+    let cols =
+        Layout::horizontal([Constraint::Percentage(60), Constraint::Percentage(40)]).split(rows[0]);
 
     let title = format!("IDEAS ({})", app.ideas.items.len());
     let block = app.theme.panel_block(&title, true);

@@ -85,7 +85,12 @@ pub fn render_panel(f: &mut Frame, app: &mut App, area: Rect, focused: bool) {
 
     let best = habits
         .iter()
-        .map(|h| (h.name.clone(), db::habit_streak(conn, h.id, today).unwrap_or(0)))
+        .map(|h| {
+            (
+                h.name.clone(),
+                db::habit_streak(conn, h.id, today).unwrap_or(0),
+            )
+        })
         .max_by_key(|(_, s)| *s);
     let streak_line = match best {
         Some((name, streak)) if streak > 0 => format!("{name}  ⚡{streak} now"),
@@ -97,7 +102,11 @@ pub fn render_panel(f: &mut Frame, app: &mut App, area: Rect, focused: bool) {
     let counts: Vec<u32> = (0..7)
         .map(|i| {
             let d = since + Duration::days(i);
-            day_counts.iter().find(|(dt, _)| *dt == d).map(|(_, n)| *n).unwrap_or(0)
+            day_counts
+                .iter()
+                .find(|(dt, _)| *dt == d)
+                .map(|(_, n)| *n)
+                .unwrap_or(0)
         })
         .collect();
     let spark = spark_chars(&counts, habit_count);
@@ -133,16 +142,22 @@ pub fn render_zoomed(f: &mut Frame, app: &mut App) {
     let inner = outer.inner(rows[0]);
     f.render_widget(outer, rows[0]);
 
-    let grid_rows = Layout::vertical([Constraint::Percentage(50), Constraint::Percentage(50)]).split(inner);
-    let top = Layout::horizontal([Constraint::Percentage(50), Constraint::Percentage(50)]).split(grid_rows[0]);
-    let bottom = Layout::horizontal([Constraint::Percentage(50), Constraint::Percentage(50)]).split(grid_rows[1]);
+    let grid_rows =
+        Layout::vertical([Constraint::Percentage(50), Constraint::Percentage(50)]).split(inner);
+    let top = Layout::horizontal([Constraint::Percentage(50), Constraint::Percentage(50)])
+        .split(grid_rows[0]);
+    let bottom = Layout::horizontal([Constraint::Percentage(50), Constraint::Percentage(50)])
+        .split(grid_rows[1]);
 
     render_heatmap(f, app, top[0]);
     render_velocity(f, app, top[1]);
     render_focus(f, app, bottom[0]);
     render_week_review(f, app, bottom[1]);
 
-    let hint = app.status.clone().unwrap_or_else(|| " r range · esc home ".into());
+    let hint = app
+        .status
+        .clone()
+        .unwrap_or_else(|| " r range · esc home ".into());
     f.render_widget(Paragraph::new(hint).style(app.theme.hint()), rows[1]);
 }
 
@@ -160,7 +175,13 @@ fn render_heatmap(f: &mut Frame, app: &mut App, area: Rect) {
     let habit_count = habits.len() as u32;
     let since = since_for(app.stats.range, today);
     let day_counts = db::stat_habit_days(&app.conn, since).unwrap_or_default();
-    let lookup = |d: NaiveDate| day_counts.iter().find(|(dt, _)| *dt == d).map(|(_, n)| *n).unwrap_or(0);
+    let lookup = |d: NaiveDate| {
+        day_counts
+            .iter()
+            .find(|(dt, _)| *dt == d)
+            .map(|(_, n)| *n)
+            .unwrap_or(0)
+    };
 
     let this_monday = today - Duration::days(today.weekday().num_days_from_monday() as i64);
     let earliest_monday = since - Duration::days(since.weekday().num_days_from_monday() as i64);
@@ -204,7 +225,10 @@ fn render_heatmap(f: &mut Frame, app: &mut App, area: Rect) {
         let best = db::habit_best_streak(&app.conn, h.id).unwrap_or(0);
         lines.push(Line::from(vec![
             Span::styled(format!("{:<12}", h.name), Style::default().fg(t.text)),
-            Span::styled(format!("⚡{cur} now · {best} best"), Style::default().fg(t.peach)),
+            Span::styled(
+                format!("⚡{cur} now · {best} best"),
+                Style::default().fg(t.peach),
+            ),
         ]));
     }
 
@@ -257,14 +281,24 @@ fn render_velocity(f: &mut Frame, app: &mut App, area: Rect) {
     let created_recent = recent(&created);
     let completed_recent = recent(&completed);
 
-    f.render_widget(Paragraph::new(Line::styled("created", Style::default().fg(t.blue))), rows[0]);
     f.render_widget(
-        Sparkline::default().data(&created_recent).style(Style::default().fg(t.blue)),
+        Paragraph::new(Line::styled("created", Style::default().fg(t.blue))),
+        rows[0],
+    );
+    f.render_widget(
+        Sparkline::default()
+            .data(&created_recent)
+            .style(Style::default().fg(t.blue)),
         rows[1],
     );
-    f.render_widget(Paragraph::new(Line::styled("completed", Style::default().fg(t.green))), rows[2]);
     f.render_widget(
-        Sparkline::default().data(&completed_recent).style(Style::default().fg(t.green)),
+        Paragraph::new(Line::styled("completed", Style::default().fg(t.green))),
+        rows[2],
+    );
+    f.render_widget(
+        Sparkline::default()
+            .data(&completed_recent)
+            .style(Style::default().fg(t.green)),
         rows[3],
     );
     f.render_widget(
@@ -293,13 +327,21 @@ fn render_focus(f: &mut Frame, app: &mut App, area: Rect) {
     let bars: Vec<(String, u64)> = (0..n)
         .map(|i| {
             let d = start + Duration::days(i);
-            let m = mins.iter().find(|(dt, _)| *dt == d).map(|(_, v)| *v).unwrap_or(0);
+            let m = mins
+                .iter()
+                .find(|(dt, _)| *dt == d)
+                .map(|(_, v)| *v)
+                .unwrap_or(0);
             (d.day().to_string(), m as u64)
         })
         .collect();
     let bar_data: Vec<(&str, u64)> = bars.iter().map(|(l, v)| (l.as_str(), *v)).collect();
 
-    let rows = Layout::vertical([Constraint::Length((inner.height * 3 / 5).max(4)), Constraint::Min(0)]).split(inner);
+    let rows = Layout::vertical([
+        Constraint::Length((inner.height * 3 / 5).max(4)),
+        Constraint::Min(0),
+    ])
+    .split(inner);
 
     let chart = BarChart::default()
         .data(&bar_data)
@@ -315,7 +357,11 @@ fn render_focus(f: &mut Frame, app: &mut App, area: Rect) {
     let bar_budget = (rows[1].width as usize).saturating_sub(24).clamp(4, 20);
     let mut plines: Vec<Line> = Vec::new();
     for (name, m) in projects.iter().take(rows[1].height as usize) {
-        let bar_len = if max_proj == 0 { 0 } else { (*m as usize * bar_budget) / max_proj as usize };
+        let bar_len = if max_proj == 0 {
+            0
+        } else {
+            (*m as usize * bar_budget) / max_proj as usize
+        };
         let bar_len = if *m > 0 { bar_len.max(1) } else { 0 };
         let bar = "█".repeat(bar_len);
         plines.push(Line::from(vec![
@@ -325,7 +371,10 @@ fn render_focus(f: &mut Frame, app: &mut App, area: Rect) {
         ]));
     }
     if plines.is_empty() {
-        plines.push(Line::styled(" no focus sessions yet", Style::default().fg(t.muted)));
+        plines.push(Line::styled(
+            " no focus sessions yet",
+            Style::default().fg(t.muted),
+        ));
     }
     f.render_widget(Paragraph::new(plines), rows[1]);
 }
@@ -342,9 +391,17 @@ fn render_week_review(f: &mut Frame, app: &mut App, area: Rect) {
     let today = app.today;
     let this_monday = today - Duration::days(today.weekday().num_days_from_monday() as i64);
     let last_monday = this_monday - Duration::days(7);
-    let empty = db::WeekStats { habit_pct: 0, todos_done: 0, focus_min: 0 };
+    let empty = db::WeekStats {
+        habit_pct: 0,
+        todos_done: 0,
+        focus_min: 0,
+    };
     let cur = db::stat_week(&app.conn, this_monday).unwrap_or(empty);
-    let empty2 = db::WeekStats { habit_pct: 0, todos_done: 0, focus_min: 0 };
+    let empty2 = db::WeekStats {
+        habit_pct: 0,
+        todos_done: 0,
+        focus_min: 0,
+    };
     let prev = db::stat_week(&app.conn, last_monday).unwrap_or(empty2);
 
     let habit_delta = cur.habit_pct as i64 - prev.habit_pct as i64;
@@ -352,7 +409,11 @@ fn render_week_review(f: &mut Frame, app: &mut App, area: Rect) {
     let focus_delta = cur.focus_min as i64 - prev.focus_min as i64;
 
     let arrow = |delta: i64| -> (&'static str, Color) {
-        if delta >= 0 { ("▲", t.green) } else { ("▼", t.red) }
+        if delta >= 0 {
+            ("▲", t.green)
+        } else {
+            ("▼", t.red)
+        }
     };
     let (ha, hc) = arrow(habit_delta);
     let (ta, tc) = arrow(todos_delta);
@@ -365,15 +426,25 @@ fn render_week_review(f: &mut Frame, app: &mut App, area: Rect) {
             Span::styled(format!("{ha} {:+}", habit_delta), Style::default().fg(hc)),
         ]),
         Line::from(vec![
-            Span::styled(format!("{:<15}", "todos closed"), Style::default().fg(t.text)),
+            Span::styled(
+                format!("{:<15}", "todos closed"),
+                Style::default().fg(t.text),
+            ),
             Span::styled(format!("{} ", cur.todos_done), Style::default().fg(t.text)),
             Span::styled(format!("{ta} {:+}", todos_delta), Style::default().fg(tc)),
         ]),
         Line::from(vec![
             Span::styled(format!("{:<15}", "focus"), Style::default().fg(t.text)),
-            Span::styled(format!("{} ", fmt_hm(cur.focus_min)), Style::default().fg(t.text)),
             Span::styled(
-                format!("{fa} {}{}", if focus_delta >= 0 { "+" } else { "-" }, fmt_hm(focus_delta.unsigned_abs() as u32)),
+                format!("{} ", fmt_hm(cur.focus_min)),
+                Style::default().fg(t.text),
+            ),
+            Span::styled(
+                format!(
+                    "{fa} {}{}",
+                    if focus_delta >= 0 { "+" } else { "-" },
+                    fmt_hm(focus_delta.unsigned_abs() as u32)
+                ),
                 Style::default().fg(fc),
             ),
         ]),

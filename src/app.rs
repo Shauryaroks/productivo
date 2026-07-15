@@ -6,10 +6,21 @@ use crate::config::Config;
 use crate::theme::Theme;
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
-pub enum Screen { Home, Habits, Todos, Calendar, Ideas, Pomodoro, Stats }
+pub enum Screen {
+    Home,
+    Habits,
+    Todos,
+    Calendar,
+    Ideas,
+    Pomodoro,
+    Stats,
+}
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
-pub enum InputMode { Normal, Editing }
+pub enum InputMode {
+    Normal,
+    Editing,
+}
 
 pub struct App {
     pub conn: Connection,
@@ -85,7 +96,10 @@ impl App {
 
         // Global keys (Normal mode only)
         match key.code {
-            KeyCode::Char('q') => { self.should_quit = true; return; }
+            KeyCode::Char('q') => {
+                self.should_quit = true;
+                return;
+            }
             KeyCode::Esc => {
                 self.reset_habits_day_if_leaving();
                 self.screen = Screen::Home;

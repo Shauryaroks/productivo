@@ -54,7 +54,9 @@ pub fn handle_key(app: &mut App, key: KeyEvent) {
                 app.habits.input = None;
                 app.mode = InputMode::Normal;
             }
-            KeyCode::Backspace => { buf.pop(); }
+            KeyCode::Backspace => {
+                buf.pop();
+            }
             KeyCode::Char(c) => buf.push(c),
             _ => {}
         }
@@ -161,7 +163,9 @@ pub fn render_zoomed(f: &mut Frame, app: &mut App) {
         None => "today".to_string(),
         Some(d) => format!("yesterday · {d}"),
     };
-    let block = app.theme.panel_block(&format!("HABITS — {day_label}"), true);
+    let block = app
+        .theme
+        .panel_block(&format!("HABITS — {day_label}"), true);
     f.render_widget(List::new(habit_lines(app, true)).block(block), rows[0]);
 
     let hint = app.status.clone().unwrap_or_else(|| {

@@ -44,8 +44,12 @@ impl Default for Theme {
 
 fn hex(s: &str) -> Option<Color> {
     let s = s.strip_prefix('#')?;
-    if s.len() != 6 { return None; }
-    if !s.is_ascii() { return None; }
+    if s.len() != 6 {
+        return None;
+    }
+    if !s.is_ascii() {
+        return None;
+    }
     let r = u8::from_str_radix(&s[0..2], 16).ok()?;
     let g = u8::from_str_radix(&s[2..4], 16).ok()?;
     let b = u8::from_str_radix(&s[4..6], 16).ok()?;
@@ -55,12 +59,24 @@ fn hex(s: &str) -> Option<Color> {
 impl Theme {
     pub fn from_cfg(cfg: &ThemeCfg) -> Self {
         let mut t = Self::default();
-        if let Some(c) = cfg.accent.as_deref().and_then(hex) { t.accent = c; }
-        if let Some(c) = cfg.green.as_deref().and_then(hex) { t.green = c; }
-        if let Some(c) = cfg.red.as_deref().and_then(hex) { t.red = c; }
-        if let Some(c) = cfg.yellow.as_deref().and_then(hex) { t.yellow = c; }
-        if let Some(c) = cfg.blue.as_deref().and_then(hex) { t.blue = c; }
-        if let Some(c) = cfg.peach.as_deref().and_then(hex) { t.peach = c; }
+        if let Some(c) = cfg.accent.as_deref().and_then(hex) {
+            t.accent = c;
+        }
+        if let Some(c) = cfg.green.as_deref().and_then(hex) {
+            t.green = c;
+        }
+        if let Some(c) = cfg.red.as_deref().and_then(hex) {
+            t.red = c;
+        }
+        if let Some(c) = cfg.yellow.as_deref().and_then(hex) {
+            t.yellow = c;
+        }
+        if let Some(c) = cfg.blue.as_deref().and_then(hex) {
+            t.blue = c;
+        }
+        if let Some(c) = cfg.peach.as_deref().and_then(hex) {
+            t.peach = c;
+        }
         t
     }
 
@@ -68,7 +84,9 @@ impl Theme {
     pub fn panel_block(&self, title: &str, focused: bool) -> Block<'static> {
         let border = if focused { self.accent } else { self.muted };
         let title_style = if focused {
-            Style::default().fg(self.accent).add_modifier(Modifier::BOLD)
+            Style::default()
+                .fg(self.accent)
+                .add_modifier(Modifier::BOLD)
         } else {
             Style::default().fg(self.text)
         };
@@ -76,7 +94,10 @@ impl Theme {
             .borders(Borders::ALL)
             .border_type(BorderType::Rounded)
             .border_style(Style::default().fg(border))
-            .title(ratatui::text::Span::styled(format!(" {title} "), title_style))
+            .title(ratatui::text::Span::styled(
+                format!(" {title} "),
+                title_style,
+            ))
     }
 
     pub fn hint(&self) -> Style {

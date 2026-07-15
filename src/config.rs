@@ -41,7 +41,10 @@ impl Default for Config {
 
 impl Default for PomodoroCfg {
     fn default() -> Self {
-        Self { focus_min: 25, break_min: 5 }
+        Self {
+            focus_min: 25,
+            break_min: 5,
+        }
     }
 }
 
@@ -50,7 +53,10 @@ impl Default for PomodoroCfg {
 fn sanitize(mut c: Config) -> (Config, Option<String>) {
     if c.panels.is_empty() {
         c.panels = Config::default().panels;
-        (c, Some("config.toml: panels empty, using default panel order".into()))
+        (
+            c,
+            Some("config.toml: panels empty, using default panel order".into()),
+        )
     } else {
         (c, None)
     }
@@ -66,7 +72,10 @@ pub fn load() -> (Config, Option<String>) {
     match std::fs::read_to_string(&path) {
         Ok(s) => match toml::from_str(&s) {
             Ok(c) => sanitize(c),
-            Err(e) => (Config::default(), Some(format!("config.toml invalid, using defaults: {e}"))),
+            Err(e) => (
+                Config::default(),
+                Some(format!("config.toml invalid, using defaults: {e}")),
+            ),
         },
         Err(_) => (Config::default(), None), // no file = defaults, not an error
     }
@@ -85,7 +94,9 @@ mod tests {
 
     #[test]
     fn partial_toml_fills_defaults() {
-        let c: Config = toml::from_str("panels = [\"todos\", \"stats\"]\n[pomodoro]\nfocus_min = 50\n").unwrap();
+        let c: Config =
+            toml::from_str("panels = [\"todos\", \"stats\"]\n[pomodoro]\nfocus_min = 50\n")
+                .unwrap();
         assert_eq!(c.panels, vec!["todos", "stats"]);
         assert_eq!(c.pomodoro.focus_min, 50);
         assert_eq!(c.pomodoro.break_min, 5);
@@ -98,6 +109,9 @@ mod tests {
         let (sanitized, warning) = sanitize(c);
         assert_eq!(sanitized.panels.len(), 6);
         assert_eq!(sanitized.panels, Config::default().panels);
-        assert_eq!(warning, Some("config.toml: panels empty, using default panel order".into()));
+        assert_eq!(
+            warning,
+            Some("config.toml: panels empty, using default panel order".into())
+        );
     }
 }

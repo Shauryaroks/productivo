@@ -15,8 +15,8 @@ pub fn render(f: &mut Frame, app: &mut App) {
     );
 
     let rows = Layout::vertical([Constraint::Min(0), Constraint::Length(1)]).split(area);
-    let cols = Layout::horizontal([Constraint::Percentage(42), Constraint::Percentage(58)])
-        .split(rows[0]);
+    let cols =
+        Layout::horizontal([Constraint::Percentage(42), Constraint::Percentage(58)]).split(rows[0]);
     let left = Layout::vertical([Constraint::Ratio(1, 3); 3]).split(cols[0]);
     let right = Layout::vertical([Constraint::Ratio(1, 3); 3]).split(cols[1]);
     let slots: Vec<Rect> = left.iter().chain(right.iter()).copied().collect();
@@ -26,9 +26,10 @@ pub fn render(f: &mut Frame, app: &mut App) {
         render_panel(f, app, panel, slot, i == app.focus);
     }
 
-    let hint = app.status.clone().unwrap_or_else(|| {
-        " tab focus · enter zoom · 1-6 jump · q quit ".into()
-    });
+    let hint = app
+        .status
+        .clone()
+        .unwrap_or_else(|| " tab focus · enter zoom · 1-6 jump · q quit ".into());
     f.render_widget(
         Paragraph::new(Line::from(hint)).style(app.theme.hint()),
         rows[1],

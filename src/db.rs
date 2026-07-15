@@ -105,7 +105,12 @@ pub fn habits_list(conn: &Connection) -> rusqlite::Result<Vec<Habit>> {
         "SELECT id, name, position, archived FROM habits WHERE archived = 0 ORDER BY position",
     )?;
     let rows = stmt.query_map([], |r| {
-        Ok(Habit { id: r.get(0)?, name: r.get(1)?, position: r.get(2)?, archived: r.get::<_, i64>(3)? != 0 })
+        Ok(Habit {
+            id: r.get(0)?,
+            name: r.get(1)?,
+            position: r.get(2)?,
+            archived: r.get::<_, i64>(3)? != 0,
+        })
     })?;
     rows.collect()
 }
@@ -125,7 +130,9 @@ pub fn habit_archive(conn: &Connection, id: i64) -> rusqlite::Result<()> {
 }
 
 pub fn habit_move(conn: &Connection, id: i64, delta: i64) -> rusqlite::Result<bool> {
-    let pos: i64 = conn.query_row("SELECT position FROM habits WHERE id = ?1", [id], |r| r.get(0))?;
+    let pos: i64 = conn.query_row("SELECT position FROM habits WHERE id = ?1", [id], |r| {
+        r.get(0)
+    })?;
     let neighbor: Option<(i64, i64)> = if delta > 0 {
         conn.query_row(
             "SELECT id, position FROM habits WHERE archived = 0 AND position > ?1 ORDER BY position LIMIT 1",
@@ -144,8 +151,14 @@ pub fn habit_move(conn: &Connection, id: i64, delta: i64) -> rusqlite::Result<bo
         None
     };
     if let Some((nid, npos)) = neighbor {
-        conn.execute("UPDATE habits SET position = ?1 WHERE id = ?2", params![npos, id])?;
-        conn.execute("UPDATE habits SET position = ?1 WHERE id = ?2", params![pos, nid])?;
+        conn.execute(
+            "UPDATE habits SET position = ?1 WHERE id = ?2",
+            params![npos, id],
+        )?;
+        conn.execute(
+            "UPDATE habits SET position = ?1 WHERE id = ?2",
+            params![pos, nid],
+        )?;
         Ok(true)
     } else {
         Ok(false)
@@ -173,7 +186,8 @@ pub fn habit_checked_on(conn: &Connection, date: NaiveDate) -> rusqlite::Result<
 }
 
 pub fn habit_streak(conn: &Connection, id: i64, today: NaiveDate) -> rusqlite::Result<u32> {
-    let mut stmt = conn.prepare("SELECT date FROM habit_log WHERE habit_id = ?1 ORDER BY date DESC")?;
+    let mut stmt =
+        conn.prepare("SELECT date FROM habit_log WHERE habit_id = ?1 ORDER BY date DESC")?;
     let dates: Vec<NaiveDate> = stmt
         .query_map([id], |r| r.get::<_, String>(0))?
         .filter_map(|s| s.ok().and_then(|s| s.parse().ok()))
@@ -245,7 +259,7 @@ pub fn todos_open(conn: &Connection) -> rusqlite::Result<Vec<Todo>> {
          WHERE done_at IS NULL AND parent_id IS NULL
          ORDER BY due_date IS NULL, due_date, priority DESC, created_at"
     ))?;
-    let rows = stmt.query_map([], |r| row_to_todo(r))?;
+    let rows = stmt.query_map([], row_to_todo)?;
     rows.collect()
 }
 
@@ -253,7 +267,7 @@ pub fn subtasks_of(conn: &Connection, parent_id: i64) -> rusqlite::Result<Vec<To
     let mut stmt = conn.prepare(&format!(
         "SELECT {TODO_COLS} FROM todos WHERE parent_id = ?1 ORDER BY done_at IS NOT NULL, created_at"
     ))?;
-    let rows = stmt.query_map([parent_id], |r| row_to_todo(r))?;
+    let rows = stmt.query_map([parent_id], row_to_todo)?;
     rows.collect()
 }
 
@@ -271,12 +285,16 @@ pub fn todo_complete(conn: &Connection, id: i64, today: NaiveDate) -> rusqlite::
         params![chrono::Utc::now().to_rfc3339(), id],
     )?;
     let mut stmt = conn.prepare(&format!("SELECT {TODO_COLS} FROM todos WHERE id = ?1"))?;
-    let t = stmt.query_row([id], |r| row_to_todo(r))?;
+    let t = stmt.query_row([id], row_to_todo)?;
     if let Some(rule) = t.recur_rule.as_deref().and_then(recur::parse) {
         let next = NewTodo {
-            title: t.title, notes: t.notes, priority: t.priority,
+            title: t.title,
+            notes: t.notes,
+            priority: t.priority,
             due_date: Some(recur::next_after(&rule, today)),
-            project: t.project, tags: t.tags, parent_id: None,
+            project: t.project,
+            tags: t.tags,
+            parent_id: None,
             recur_rule: t.recur_rule.clone(),
         };
         todo_add(conn, &next)?;
@@ -295,8 +313,12 @@ pub fn todo_delete(conn: &Connection, id: i64) -> rusqlite::Result<()> {
 }
 
 pub fn event_add(
-    conn: &Connection, title: &str, date: NaiveDate,
-    time: Option<&str>, category: &str, color: &str,
+    conn: &Connection,
+    title: &str,
+    date: NaiveDate,
+    time: Option<&str>,
+    category: &str,
+    color: &str,
 ) -> rusqlite::Result<()> {
     conn.execute(
         "INSERT INTO events (title, date, time, category, color) VALUES (?1, ?2, ?3, ?4, ?5)",
@@ -310,27 +332,39 @@ pub fn event_delete(conn: &Connection, id: i64) -> rusqlite::Result<()> {
     Ok(())
 }
 
-pub fn events_between(conn: &Connection, start: NaiveDate, end: NaiveDate) -> rusqlite::Result<Vec<Event>> {
+pub fn events_between(
+    conn: &Connection,
+    start: NaiveDate,
+    end: NaiveDate,
+) -> rusqlite::Result<Vec<Event>> {
     let mut stmt = conn.prepare(
         "SELECT id, title, date, time, category, color, notes FROM events
          WHERE date >= ?1 AND date <= ?2 ORDER BY date, time",
     )?;
     let rows = stmt.query_map(params![start.to_string(), end.to_string()], |r| {
         Ok(Event {
-            id: r.get(0)?, title: r.get(1)?,
+            id: r.get(0)?,
+            title: r.get(1)?,
             date: r.get::<_, String>(2)?.parse().unwrap(),
-            time: r.get(3)?, category: r.get(4)?, color: r.get(5)?, notes: r.get(6)?,
+            time: r.get(3)?,
+            category: r.get(4)?,
+            color: r.get(5)?,
+            notes: r.get(6)?,
         })
     })?;
     rows.collect()
 }
 
-pub fn todos_due_between(conn: &Connection, start: NaiveDate, end: NaiveDate) -> rusqlite::Result<Vec<Todo>> {
+pub fn todos_due_between(
+    conn: &Connection,
+    start: NaiveDate,
+    end: NaiveDate,
+) -> rusqlite::Result<Vec<Todo>> {
     let mut stmt = conn.prepare(&format!(
         "SELECT {TODO_COLS} FROM todos
          WHERE done_at IS NULL AND due_date >= ?1 AND due_date <= ?2 ORDER BY due_date"
     ))?;
-    let rows = stmt.query_map(params![start.to_string(), end.to_string()], |r| row_to_todo(r))?;
+    let rows = stmt.query_map(params![start.to_string(), end.to_string()], row_to_todo)?;
     rows.collect()
 }
 
@@ -340,7 +374,13 @@ pub fn ideas_list(conn: &Connection) -> rusqlite::Result<Vec<Idea>> {
          ORDER BY status = 'dropped', created_at DESC",
     )?;
     let rows = stmt.query_map([], |r| {
-        Ok(Idea { id: r.get(0)?, title: r.get(1)?, body: r.get(2)?, status: r.get(3)?, created_at: r.get(4)? })
+        Ok(Idea {
+            id: r.get(0)?,
+            title: r.get(1)?,
+            body: r.get(2)?,
+            status: r.get(3)?,
+            created_at: r.get(4)?,
+        })
     })?;
     rows.collect()
 }
@@ -354,17 +394,24 @@ pub fn idea_add(conn: &Connection, title: &str) -> rusqlite::Result<()> {
 }
 
 pub fn idea_set_body(conn: &Connection, id: i64, body: &str) -> rusqlite::Result<()> {
-    conn.execute("UPDATE ideas SET body = ?1 WHERE id = ?2", params![body, id])?;
+    conn.execute(
+        "UPDATE ideas SET body = ?1 WHERE id = ?2",
+        params![body, id],
+    )?;
     Ok(())
 }
 
 const IDEA_STATUSES: [&str; 5] = ["spark", "brewing", "active", "shipped", "dropped"];
 
 pub fn idea_cycle_status(conn: &Connection, id: i64) -> rusqlite::Result<String> {
-    let cur: String = conn.query_row("SELECT status FROM ideas WHERE id = ?1", [id], |r| r.get(0))?;
+    let cur: String =
+        conn.query_row("SELECT status FROM ideas WHERE id = ?1", [id], |r| r.get(0))?;
     let i = IDEA_STATUSES.iter().position(|s| *s == cur).unwrap_or(0);
     let next = IDEA_STATUSES[(i + 1) % IDEA_STATUSES.len()].to_string();
-    conn.execute("UPDATE ideas SET status = ?1 WHERE id = ?2", params![next, id])?;
+    conn.execute(
+        "UPDATE ideas SET status = ?1 WHERE id = ?2",
+        params![next, id],
+    )?;
     Ok(next)
 }
 
@@ -399,7 +446,8 @@ pub fn pomo_count_today(conn: &Connection, date: NaiveDate) -> rusqlite::Result<
 }
 
 pub fn habit_best_streak(conn: &Connection, id: i64) -> rusqlite::Result<u32> {
-    let mut stmt = conn.prepare("SELECT date FROM habit_log WHERE habit_id = ?1 ORDER BY date ASC")?;
+    let mut stmt =
+        conn.prepare("SELECT date FROM habit_log WHERE habit_id = ?1 ORDER BY date ASC")?;
     let dates: Vec<NaiveDate> = stmt
         .query_map([id], |r| r.get::<_, String>(0))?
         .filter_map(|s| s.ok().and_then(|s| s.parse().ok()))
@@ -418,19 +466,26 @@ pub fn habit_best_streak(conn: &Connection, id: i64) -> rusqlite::Result<u32> {
     Ok(best)
 }
 
-pub fn stat_habit_days(conn: &Connection, since: NaiveDate) -> rusqlite::Result<Vec<(NaiveDate, u32)>> {
+pub fn stat_habit_days(
+    conn: &Connection,
+    since: NaiveDate,
+) -> rusqlite::Result<Vec<(NaiveDate, u32)>> {
     let mut stmt = conn.prepare(
         "SELECT date, COUNT(*) FROM habit_log WHERE date >= ?1 GROUP BY date ORDER BY date",
     )?;
     let rows = stmt.query_map([since.to_string()], |r| {
         Ok((r.get::<_, String>(0)?, r.get::<_, u32>(1)?))
     })?;
-    Ok(rows.filter_map(|r| r.ok())
+    Ok(rows
+        .filter_map(|r| r.ok())
         .filter_map(|(s, n)| s.parse().ok().map(|dt| (dt, n)))
         .collect())
 }
 
-pub fn stat_todo_velocity(conn: &Connection, since: NaiveDate) -> rusqlite::Result<Vec<(NaiveDate, u32, u32)>> {
+pub fn stat_todo_velocity(
+    conn: &Connection,
+    since: NaiveDate,
+) -> rusqlite::Result<Vec<(NaiveDate, u32, u32)>> {
     let mut stmt = conn.prepare(
         "SELECT day, SUM(created), SUM(completed) FROM (
             SELECT date(created_at) AS day, 1 AS created, 0 AS completed FROM todos WHERE date(created_at) >= ?1
@@ -439,14 +494,22 @@ pub fn stat_todo_velocity(conn: &Connection, since: NaiveDate) -> rusqlite::Resu
          ) GROUP BY day ORDER BY day",
     )?;
     let rows = stmt.query_map([since.to_string()], |r| {
-        Ok((r.get::<_, String>(0)?, r.get::<_, u32>(1)?, r.get::<_, u32>(2)?))
+        Ok((
+            r.get::<_, String>(0)?,
+            r.get::<_, u32>(1)?,
+            r.get::<_, u32>(2)?,
+        ))
     })?;
-    Ok(rows.filter_map(|r| r.ok())
+    Ok(rows
+        .filter_map(|r| r.ok())
         .filter_map(|(s, a, b)| s.parse().ok().map(|dt| (dt, a, b)))
         .collect())
 }
 
-pub fn stat_focus_minutes(conn: &Connection, since: NaiveDate) -> rusqlite::Result<Vec<(NaiveDate, u32)>> {
+pub fn stat_focus_minutes(
+    conn: &Connection,
+    since: NaiveDate,
+) -> rusqlite::Result<Vec<(NaiveDate, u32)>> {
     let mut stmt = conn.prepare(
         "SELECT date(started_at),
                 CAST(SUM((julianday(ended_at) - julianday(started_at)) * 1440) AS INTEGER)
@@ -457,12 +520,16 @@ pub fn stat_focus_minutes(conn: &Connection, since: NaiveDate) -> rusqlite::Resu
     let rows = stmt.query_map([since.to_string()], |r| {
         Ok((r.get::<_, String>(0)?, r.get::<_, u32>(1)?))
     })?;
-    Ok(rows.filter_map(|r| r.ok())
+    Ok(rows
+        .filter_map(|r| r.ok())
         .filter_map(|(s, n)| s.parse().ok().map(|dt| (dt, n)))
         .collect())
 }
 
-pub fn stat_focus_by_project(conn: &Connection, since: NaiveDate) -> rusqlite::Result<Vec<(String, u32)>> {
+pub fn stat_focus_by_project(
+    conn: &Connection,
+    since: NaiveDate,
+) -> rusqlite::Result<Vec<(String, u32)>> {
     let mut stmt = conn.prepare(
         "SELECT COALESCE(t.project, '(none)') AS proj,
                 CAST(SUM((julianday(p.ended_at) - julianday(p.started_at)) * 1440) AS INTEGER) AS mins
@@ -482,12 +549,20 @@ pub struct WeekStats {
 
 pub fn stat_week(conn: &Connection, week_start: NaiveDate) -> rusqlite::Result<WeekStats> {
     let end = week_start + chrono::Duration::days(6);
-    let habit_count: u32 = conn.query_row(
-        "SELECT COUNT(*) FROM habits WHERE archived = 0", [], |r| r.get(0))?;
+    let habit_count: u32 =
+        conn.query_row("SELECT COUNT(*) FROM habits WHERE archived = 0", [], |r| {
+            r.get(0)
+        })?;
     let checked: u32 = conn.query_row(
         "SELECT COUNT(*) FROM habit_log WHERE date >= ?1 AND date <= ?2",
-        params![week_start.to_string(), end.to_string()], |r| r.get(0))?;
-    let habit_pct = if habit_count == 0 { 0 } else { checked * 100 / (habit_count * 7) };
+        params![week_start.to_string(), end.to_string()],
+        |r| r.get(0),
+    )?;
+    let habit_pct = if habit_count == 0 {
+        0
+    } else {
+        checked * 100 / (habit_count * 7)
+    };
     let todos_done: u32 = conn.query_row(
         "SELECT COUNT(*) FROM todos WHERE done_at IS NOT NULL AND date(done_at) >= ?1 AND date(done_at) <= ?2",
         params![week_start.to_string(), end.to_string()], |r| r.get(0))?;
@@ -496,14 +571,20 @@ pub fn stat_week(conn: &Connection, week_start: NaiveDate) -> rusqlite::Result<W
          FROM pomodoros WHERE kind = 'focus' AND completed = 1 AND ended_at IS NOT NULL
            AND date(started_at) >= ?1 AND date(started_at) <= ?2",
         params![week_start.to_string(), end.to_string()], |r| r.get(0))?;
-    Ok(WeekStats { habit_pct, todos_done, focus_min })
+    Ok(WeekStats {
+        habit_pct,
+        todos_done,
+        focus_min,
+    })
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
 
-    fn d(s: &str) -> chrono::NaiveDate { s.parse().unwrap() }
+    fn d(s: &str) -> chrono::NaiveDate {
+        s.parse().unwrap()
+    }
 
     fn test_conn() -> rusqlite::Connection {
         let c = rusqlite::Connection::open_in_memory().unwrap();
@@ -525,7 +606,9 @@ mod tests {
             )
             .unwrap();
         assert_eq!(count, 6);
-        let v: i64 = conn.query_row("PRAGMA user_version", [], |r| r.get(0)).unwrap();
+        let v: i64 = conn
+            .query_row("PRAGMA user_version", [], |r| r.get(0))
+            .unwrap();
         assert_eq!(v, 1);
     }
 
@@ -575,9 +658,14 @@ mod tests {
 
     fn new_todo(title: &str) -> NewTodo {
         NewTodo {
-            title: title.into(), notes: String::new(), priority: 0,
-            due_date: None, project: None, tags: String::new(),
-            parent_id: None, recur_rule: None,
+            title: title.into(),
+            notes: String::new(),
+            priority: 0,
+            due_date: None,
+            project: None,
+            tags: String::new(),
+            parent_id: None,
+            recur_rule: None,
         }
     }
 
@@ -610,13 +698,20 @@ mod tests {
     #[test]
     fn todos_open_orders_overdue_then_due_then_priority() {
         let c = test_conn();
-        let mut a = new_todo("low no-due"); a.priority = 0;
-        let mut b = new_todo("high no-due"); b.priority = 2;
-        let mut o = new_todo("overdue"); o.due_date = Some(d("2026-07-01"));
+        let mut a = new_todo("low no-due");
+        a.priority = 0;
+        let mut b = new_todo("high no-due");
+        b.priority = 2;
+        let mut o = new_todo("overdue");
+        o.due_date = Some(d("2026-07-01"));
         todo_add(&c, &a).unwrap();
         todo_add(&c, &b).unwrap();
         todo_add(&c, &o).unwrap();
-        let titles: Vec<_> = todos_open(&c).unwrap().into_iter().map(|t| t.title).collect();
+        let titles: Vec<_> = todos_open(&c)
+            .unwrap()
+            .into_iter()
+            .map(|t| t.title)
+            .collect();
         assert_eq!(titles, vec!["overdue", "high no-due", "low no-due"]);
     }
 
@@ -641,7 +736,10 @@ mod tests {
         event_add(&c, "a", d("2026-07-15"), Some("09:00"), "health", "peach").unwrap();
         event_add(&c, "outside", d("2026-08-01"), None, "work", "blue").unwrap();
         let ev = events_between(&c, d("2026-07-15"), d("2026-07-31")).unwrap();
-        assert_eq!(ev.iter().map(|e| e.title.as_str()).collect::<Vec<_>>(), vec!["a", "b"]);
+        assert_eq!(
+            ev.iter().map(|e| e.title.as_str()).collect::<Vec<_>>(),
+            vec!["a", "b"]
+        );
     }
 
     #[test]
@@ -652,15 +750,20 @@ mod tests {
         for _ in 0..5 {
             seen.push(idea_cycle_status(&c, 1).unwrap());
         }
-        assert_eq!(seen, vec!["spark", "brewing", "active", "shipped", "dropped", "spark"]);
+        assert_eq!(
+            seen,
+            vec!["spark", "brewing", "active", "shipped", "dropped", "spark"]
+        );
     }
 
     #[test]
     fn todos_due_between_only_open() {
         let c = test_conn();
-        let mut t = new_todo("due in range"); t.due_date = Some(d("2026-07-16"));
+        let mut t = new_todo("due in range");
+        t.due_date = Some(d("2026-07-16"));
         let id = todo_add(&c, &t).unwrap();
-        let mut t2 = new_todo("done in range"); t2.due_date = Some(d("2026-07-17"));
+        let mut t2 = new_todo("done in range");
+        t2.due_date = Some(d("2026-07-17"));
         let id2 = todo_add(&c, &t2).unwrap();
         todo_complete(&c, id2, d("2026-07-15")).unwrap();
         let due = todos_due_between(&c, d("2026-07-15"), d("2026-07-21")).unwrap();
@@ -676,14 +779,18 @@ mod tests {
         todo_complete(&c, id, d("2026-07-15")).unwrap();
         let today = chrono::Utc::now().date_naive();
         let v = stat_todo_velocity(&c, today - chrono::Duration::days(7)).unwrap();
-        let row = v.iter().find(|(dt, _, _)| *dt == today).expect("today bucket");
+        let row = v
+            .iter()
+            .find(|(dt, _, _)| *dt == today)
+            .expect("today bucket");
         assert_eq!((row.1, row.2), (2, 1)); // 2 created, 1 completed today
     }
 
     #[test]
     fn stat_focus_by_project_joins_todo_project() {
         let c = test_conn();
-        let mut t = new_todo("work task"); t.project = Some("acme".into());
+        let mut t = new_todo("work task");
+        t.project = Some("acme".into());
         let tid = todo_add(&c, &t).unwrap();
         let pid = pomo_start(&c, Some(tid), "focus").unwrap();
         pomo_finish(&c, pid, true).unwrap();
@@ -708,7 +815,13 @@ mod tests {
     fn habit_best_streak_finds_longest_run() {
         let c = test_conn();
         habit_add(&c, "gym").unwrap();
-        for day in ["2026-07-01", "2026-07-02", "2026-07-03", "2026-07-05", "2026-07-06"] {
+        for day in [
+            "2026-07-01",
+            "2026-07-02",
+            "2026-07-03",
+            "2026-07-05",
+            "2026-07-06",
+        ] {
             habit_toggle(&c, 1, d(day)).unwrap();
         }
         assert_eq!(habit_best_streak(&c, 1).unwrap(), 3);

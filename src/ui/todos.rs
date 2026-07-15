@@ -24,8 +24,15 @@ pub struct TodoForm {
     pub parent_id: Option<i64>,
 }
 
-pub const FIELD_LABELS: [&str; 7] =
-    ["title", "notes", "priority", "due (YYYY-MM-DD)", "project", "tags", "repeat"];
+pub const FIELD_LABELS: [&str; 7] = [
+    "title",
+    "notes",
+    "priority",
+    "due (YYYY-MM-DD)",
+    "project",
+    "tags",
+    "repeat",
+];
 
 #[derive(Default)]
 pub struct TodosState {
@@ -46,7 +53,11 @@ impl TodosState {
             let f = f.to_lowercase();
             tops.retain(|t| {
                 t.title.to_lowercase().contains(&f)
-                    || t.project.as_deref().unwrap_or("").to_lowercase().contains(&f)
+                    || t.project
+                        .as_deref()
+                        .unwrap_or("")
+                        .to_lowercase()
+                        .contains(&f)
                     || t.tags.to_lowercase().contains(&f)
             });
         }
@@ -63,7 +74,11 @@ impl TodosState {
             });
             if self.expanded == Some(id) {
                 for s in db::subtasks_of(conn, id).unwrap_or_default() {
-                    self.items.push(Row { todo: s, is_subtask: true, sub_counts: None });
+                    self.items.push(Row {
+                        todo: s,
+                        is_subtask: true,
+                        sub_counts: None,
+                    });
                 }
             }
         }
@@ -83,11 +98,15 @@ pub fn handle_key(app: &mut App, key: KeyEvent) {
     if app.todos.filter_editing {
         match key.code {
             KeyCode::Enter | KeyCode::Esc => {
-                if key.code == KeyCode::Esc { app.todos.filter = None; }
+                if key.code == KeyCode::Esc {
+                    app.todos.filter = None;
+                }
                 app.todos.filter_editing = false;
                 app.mode = InputMode::Normal;
             }
-            KeyCode::Backspace => { app.todos.filter.get_or_insert_default().pop(); }
+            KeyCode::Backspace => {
+                app.todos.filter.get_or_insert_default().pop();
+            }
             KeyCode::Char(c) => app.todos.filter.get_or_insert_default().push(c),
             _ => {}
         }
@@ -107,14 +126,21 @@ pub fn handle_key(app: &mut App, key: KeyEvent) {
             let row = &app.todos.items[app.todos.selected];
             if !row.is_subtask {
                 let id = row.todo.id;
-                app.todos.expanded = if app.todos.expanded == Some(id) { None } else { Some(id) };
+                app.todos.expanded = if app.todos.expanded == Some(id) {
+                    None
+                } else {
+                    Some(id)
+                };
                 app.todos.load(&app.conn);
             }
         }
         KeyCode::Char(' ') | KeyCode::Char('x') if n > 0 => {
             let row = &app.todos.items[app.todos.selected];
-            let (id, recurring, parent) =
-                (row.todo.id, row.todo.recur_rule.is_some(), row.todo.parent_id);
+            let (id, recurring, parent) = (
+                row.todo.id,
+                row.todo.recur_rule.is_some(),
+                row.todo.parent_id,
+            );
             let _ = db::todo_complete(&app.conn, id, app.today);
             app.todos.last_completed = Some(id);
             if recurring {
@@ -175,9 +201,12 @@ fn open_form(app: &mut App, edit: Option<Todo>, parent_id: Option<i64>) {
     let form = match edit {
         Some(t) => TodoForm {
             fields: [
-                t.title.clone(), t.notes.clone(), t.priority.to_string(),
+                t.title.clone(),
+                t.notes.clone(),
+                t.priority.to_string(),
                 t.due_date.map(|d| d.to_string()).unwrap_or_default(),
-                t.project.clone().unwrap_or_default(), t.tags.clone(),
+                t.project.clone().unwrap_or_default(),
+                t.tags.clone(),
                 t.recur_rule.clone().unwrap_or_default(),
             ],
             focus: 0,
@@ -207,10 +236,16 @@ fn form_key(app: &mut App, key: KeyEvent) {
         KeyCode::Left | KeyCode::Right if form.focus == 2 => {
             // priority cycles 0→1→2
             let p: u8 = form.fields[2].parse().unwrap_or(0);
-            let p = if key.code == KeyCode::Right { (p + 1) % 3 } else { (p + 2) % 3 };
+            let p = if key.code == KeyCode::Right {
+                (p + 1) % 3
+            } else {
+                (p + 2) % 3
+            };
             form.fields[2] = p.to_string();
         }
-        KeyCode::Backspace => { form.fields[form.focus].pop(); }
+        KeyCode::Backspace => {
+            form.fields[form.focus].pop();
+        }
         KeyCode::Enter => {
             // validate + save
             let title = form.fields[0].trim().to_string();
@@ -222,7 +257,10 @@ fn form_key(app: &mut App, key: KeyEvent) {
                 "" => None,
                 s => match s.parse::<NaiveDate>() {
                     Ok(d) => Some(d),
-                    Err(_) => { app.status = Some("due must be YYYY-MM-DD".into()); return; }
+                    Err(_) => {
+                        app.status = Some("due must be YYYY-MM-DD".into());
+                        return;
+                    }
                 },
             };
             let rule = match form.fields[6].trim() {
@@ -240,7 +278,10 @@ fn form_key(app: &mut App, key: KeyEvent) {
                 notes: form.fields[1].clone(),
                 priority: form.fields[2].parse().unwrap_or(0),
                 due_date: due,
-                project: match form.fields[4].trim() { "" => None, s => Some(s.into()) },
+                project: match form.fields[4].trim() {
+                    "" => None,
+                    s => Some(s.into()),
+                },
                 tags: form.fields[5].trim().to_string(),
                 parent_id: form.parent_id,
                 recur_rule: rule,
@@ -272,14 +313,34 @@ fn todo_line(app: &App, row: &Row, selected: bool) -> ListItem<'static> {
     if row.is_subtask {
         spans.push(Span::raw("    "));
     }
-    let mark = if done { "✔" } else if td.priority == 2 { "◉" } else { "○" };
-    let mark_color = if done { t.green } else if overdue { t.red }
-        else if td.priority == 2 { t.red } else if td.priority == 1 { t.yellow } else { t.muted };
-    spans.push(Span::styled(format!(" {mark} "), Style::default().fg(mark_color)));
+    let mark = if done {
+        "✔"
+    } else if td.priority == 2 {
+        "◉"
+    } else {
+        "○"
+    };
+    let mark_color = if done {
+        t.green
+    } else if overdue || td.priority == 2 {
+        t.red
+    } else if td.priority == 1 {
+        t.yellow
+    } else {
+        t.muted
+    };
+    spans.push(Span::styled(
+        format!(" {mark} "),
+        Style::default().fg(mark_color),
+    ));
 
     let mut title_style = Style::default().fg(if overdue { t.red } else { t.text });
-    if done { title_style = title_style.fg(t.muted).add_modifier(Modifier::CROSSED_OUT); }
-    if selected { title_style = title_style.add_modifier(Modifier::BOLD | Modifier::REVERSED); }
+    if done {
+        title_style = title_style.fg(t.muted).add_modifier(Modifier::CROSSED_OUT);
+    }
+    if selected {
+        title_style = title_style.add_modifier(Modifier::BOLD | Modifier::REVERSED);
+    }
     spans.push(Span::styled(td.title.clone(), title_style));
 
     if td.recur_rule.is_some() {
@@ -302,8 +363,14 @@ fn todo_line(app: &App, row: &Row, selected: bool) -> ListItem<'static> {
 }
 
 pub fn render_panel(f: &mut Frame, app: &mut App, area: Rect, focused: bool) {
-    let block = app.theme.panel_block(&format!("TODOS ({})", app.todos.items.len()), focused);
-    let items: Vec<ListItem> = app.todos.items.iter().enumerate()
+    let block = app
+        .theme
+        .panel_block(&format!("TODOS ({})", app.todos.items.len()), focused);
+    let items: Vec<ListItem> = app
+        .todos
+        .items
+        .iter()
+        .enumerate()
         .map(|(i, r)| todo_line(app, r, focused && i == app.todos.selected))
         .collect();
     f.render_widget(List::new(items).block(block), area);
@@ -312,14 +379,24 @@ pub fn render_panel(f: &mut Frame, app: &mut App, area: Rect, focused: bool) {
 pub fn render_zoomed(f: &mut Frame, app: &mut App) {
     let area = f.area();
     f.render_widget(
-        ratatui::widgets::Block::default().style(Style::default().bg(app.theme.bg)), area);
+        ratatui::widgets::Block::default().style(Style::default().bg(app.theme.bg)),
+        area,
+    );
     let rows = Layout::vertical([Constraint::Min(0), Constraint::Length(1)]).split(area);
 
     let mut title = String::from("TODOS");
-    if let Some(fil) = &app.todos.filter { title = format!("TODOS · filter: {fil}"); }
-    if app.todos.group_by_project { title.push_str(" · by project"); }
+    if let Some(fil) = &app.todos.filter {
+        title = format!("TODOS · filter: {fil}");
+    }
+    if app.todos.group_by_project {
+        title.push_str(" · by project");
+    }
     let block = app.theme.panel_block(&title, true);
-    let items: Vec<ListItem> = app.todos.items.iter().enumerate()
+    let items: Vec<ListItem> = app
+        .todos
+        .items
+        .iter()
+        .enumerate()
         .map(|(i, r)| todo_line(app, r, i == app.todos.selected))
         .collect();
     f.render_widget(List::new(items).block(block), rows[0]);
@@ -346,29 +423,44 @@ fn render_form(f: &mut Frame, app: &mut App, screen: Rect) {
     let popup = Rect {
         x: screen.x + (screen.width.saturating_sub(w)) / 2,
         y: screen.y + (screen.height.saturating_sub(h)) / 2,
-        width: w, height: h,
+        width: w,
+        height: h,
     };
     f.render_widget(Clear, popup);
-    let title = if form.editing_id.is_some() { "EDIT TODO" }
-        else if form.parent_id.is_some() { "NEW SUBTASK" } else { "NEW TODO" };
-    let block = t.panel_block(title, true)
+    let title = if form.editing_id.is_some() {
+        "EDIT TODO"
+    } else if form.parent_id.is_some() {
+        "NEW SUBTASK"
+    } else {
+        "NEW TODO"
+    };
+    let block = t
+        .panel_block(title, true)
         .style(Style::default().bg(t.surface));
     let inner = block.inner(popup);
     f.render_widget(block, popup);
 
-    let lines: Vec<Line> = FIELD_LABELS.iter().enumerate().map(|(i, label)| {
-        let focused = i == form.focus;
-        let val = if i == 2 {
-            ["low", "med", "high"][form.fields[2].parse::<usize>().unwrap_or(0).min(2)].to_string()
-        } else {
-            form.fields[i].clone()
-        };
-        let cursor = if focused && i != 2 { "▏" } else { "" };
-        Line::from(vec![
-            Span::styled(format!(" {label:<18}"), Style::default().fg(if focused { t.accent } else { t.muted })),
-            Span::styled(format!("{val}{cursor}"), Style::default().fg(t.text)),
-        ])
-    }).collect();
+    let lines: Vec<Line> = FIELD_LABELS
+        .iter()
+        .enumerate()
+        .map(|(i, label)| {
+            let focused = i == form.focus;
+            let val = if i == 2 {
+                ["low", "med", "high"][form.fields[2].parse::<usize>().unwrap_or(0).min(2)]
+                    .to_string()
+            } else {
+                form.fields[i].clone()
+            };
+            let cursor = if focused && i != 2 { "▏" } else { "" };
+            Line::from(vec![
+                Span::styled(
+                    format!(" {label:<18}"),
+                    Style::default().fg(if focused { t.accent } else { t.muted }),
+                ),
+                Span::styled(format!("{val}{cursor}"), Style::default().fg(t.text)),
+            ])
+        })
+        .collect();
     let mut all = lines;
     all.push(Line::from(Span::styled(
         "  tab next · ←/→ priority · enter save · esc cancel",

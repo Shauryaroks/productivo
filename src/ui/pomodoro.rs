@@ -59,7 +59,13 @@ impl PomodoroState {
     }
 }
 
-fn start_session(app: &mut App, kind: Kind, minutes: u64, todo_id: Option<i64>, todo_title: Option<String>) {
+fn start_session(
+    app: &mut App,
+    kind: Kind,
+    minutes: u64,
+    todo_id: Option<i64>,
+    todo_title: Option<String>,
+) {
     let db_id = match crate::db::pomo_start(&app.conn, todo_id, kind.as_str()) {
         Ok(id) => id,
         Err(_) => return,
@@ -122,7 +128,9 @@ pub fn handle_key(app: &mut App, key: KeyEvent) {
 /// Called from App::tick — checks for completion, rings the bell, and updates state.
 pub fn on_tick(app: &mut App) {
     let now = Utc::now();
-    let Some(active) = &app.pomodoro.active else { return };
+    let Some(active) = &app.pomodoro.active else {
+        return;
+    };
     if active.remaining(now) > Duration::zero() {
         return;
     }
@@ -133,9 +141,13 @@ pub fn on_tick(app: &mut App) {
     let _ = std::io::stdout().flush();
     match kind {
         Kind::Focus => {
-            app.pomodoro.today_count = crate::db::pomo_count_today(&app.conn, app.today).unwrap_or(0);
+            app.pomodoro.today_count =
+                crate::db::pomo_count_today(&app.conn, app.today).unwrap_or(0);
             app.pomodoro.suggest_break = true;
-            app.status = Some(format!("focus done — s starts a {}m break", app.config.pomodoro.break_min).into());
+            app.status = Some(format!(
+                "focus done — s starts a {}m break",
+                app.config.pomodoro.break_min
+            ));
         }
         Kind::Break => {
             app.status = Some("break over — s starts focus".into());
@@ -186,7 +198,9 @@ fn mmss(d: Duration) -> (i64, i64) {
 }
 
 fn active_color(app: &App) -> Color {
-    let Some(active) = &app.pomodoro.active else { return app.theme.muted };
+    let Some(active) = &app.pomodoro.active else {
+        return app.theme.muted;
+    };
     if active.paused_at.is_some() {
         app.theme.yellow
     } else {
@@ -213,7 +227,9 @@ pub fn render_panel(f: &mut Frame, app: &mut App, area: Rect, focused: bool) {
     }
     let block = app.theme.panel_block("POMODORO", focused);
     f.render_widget(
-        Paragraph::new(Line::from(line)).style(Style::default().fg(app.theme.text)).block(block),
+        Paragraph::new(Line::from(line))
+            .style(Style::default().fg(app.theme.text))
+            .block(block),
         area,
     );
 }
@@ -241,7 +257,12 @@ pub fn render_zoomed(f: &mut Frame, app: &mut App) {
     let mut lines = big_clock_lines(&clock_text, color);
 
     lines.push(Line::default());
-    let title_line = match app.pomodoro.active.as_ref().and_then(|a| a.todo_title.as_ref()) {
+    let title_line = match app
+        .pomodoro
+        .active
+        .as_ref()
+        .and_then(|a| a.todo_title.as_ref())
+    {
         Some(title) => Line::styled(title.clone(), Style::default().fg(app.theme.text)),
         None => Line::default(),
     };
@@ -251,18 +272,26 @@ pub fn render_zoomed(f: &mut Frame, app: &mut App) {
     let dots: String = (0..4)
         .map(|i| if i < filled { "● " } else { "○ " })
         .collect();
-    lines.push(Line::styled(dots.trim_end().to_string(), Style::default().fg(app.theme.peach)));
+    lines.push(Line::styled(
+        dots.trim_end().to_string(),
+        Style::default().fg(app.theme.peach),
+    ));
 
-    let content = Layout::vertical([Constraint::Fill(1), Constraint::Length(lines.len() as u16), Constraint::Fill(1)])
-        .split(inner);
+    let content = Layout::vertical([
+        Constraint::Fill(1),
+        Constraint::Length(lines.len() as u16),
+        Constraint::Fill(1),
+    ])
+    .split(inner);
     f.render_widget(
         Paragraph::new(lines).alignment(Alignment::Center),
         content[1],
     );
 
-    let hint = app.status.clone().unwrap_or_else(|| {
-        " s start · space pause · x abandon · esc home ".into()
-    });
+    let hint = app
+        .status
+        .clone()
+        .unwrap_or_else(|| " s start · space pause · x abandon · esc home ".into());
     f.render_widget(Paragraph::new(hint).style(app.theme.hint()), rows[1]);
 }
 
@@ -275,25 +304,41 @@ mod tests {
     fn remaining_counts_down_and_freezes_while_paused() {
         let t0 = Utc.with_ymd_and_hms(2026, 7, 15, 10, 0, 0).unwrap();
         let mut s = ActiveSession {
-            db_id: 1, kind: Kind::Focus, todo_title: None,
-            started_at: t0, duration: Duration::minutes(25), paused_at: None,
+            db_id: 1,
+            kind: Kind::Focus,
+            todo_title: None,
+            started_at: t0,
+            duration: Duration::minutes(25),
+            paused_at: None,
         };
-        assert_eq!(s.remaining(t0 + Duration::minutes(10)), Duration::minutes(15));
+        assert_eq!(
+            s.remaining(t0 + Duration::minutes(10)),
+            Duration::minutes(15)
+        );
         s.paused_at = Some(t0 + Duration::minutes(10));
         // clock advances, remaining doesn't
-        assert_eq!(s.remaining(t0 + Duration::minutes(20)), Duration::minutes(15));
+        assert_eq!(
+            s.remaining(t0 + Duration::minutes(20)),
+            Duration::minutes(15)
+        );
     }
 
     #[test]
     fn resume_shifts_started_at_so_no_time_is_lost() {
         let t0 = Utc.with_ymd_and_hms(2026, 7, 15, 10, 0, 0).unwrap();
         let mut s = ActiveSession {
-            db_id: 1, kind: Kind::Focus, todo_title: None,
-            started_at: t0, duration: Duration::minutes(25),
+            db_id: 1,
+            kind: Kind::Focus,
+            todo_title: None,
+            started_at: t0,
+            duration: Duration::minutes(25),
             paused_at: Some(t0 + Duration::minutes(10)),
         };
         s.resume(t0 + Duration::minutes(30)); // paused 20 min
-        assert_eq!(s.remaining(t0 + Duration::minutes(30)), Duration::minutes(15));
+        assert_eq!(
+            s.remaining(t0 + Duration::minutes(30)),
+            Duration::minutes(15)
+        );
         assert_eq!(s.paused_at, None);
     }
 }

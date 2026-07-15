@@ -1,0 +1,21 @@
+# Copy to your config dir as config.toml:
+#   Linux:   ~/.config/productivo/config.toml
+#   macOS:   ~/Library/Application Support/productivo/config.toml
+#   Windows: %APPDATA%\productivo\config.toml
+
+# Home-screen panel order: first three fill the left column top-to-bottom,
+# next three fill the right column.
+panels = ["habits", "calendar", "ideas", "todos", "pomodoro", "stats"]
+
+[pomodoro]
+focus_min = 25
+break_min = 5
+
+[theme]
+# Optional hex overrides (defaults: Catppuccin Mocha)
+# accent = "#cba6f7"
+# green  = "#a6e3a1"
+# red    = "#f38ba8"
+# yellow = "#f9e2af"
+# blue   = "#89b4fa"
+# peach  = "#fab387"

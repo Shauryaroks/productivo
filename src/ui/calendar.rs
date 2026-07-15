@@ -26,12 +26,16 @@ impl Default for CalendarState {
     fn default() -> Self {
         Self {
             cursor: chrono::Local::now().date_naive(),
-            events: Vec::new(), due: Vec::new(), form: None,
+            events: Vec::new(),
+            due: Vec::new(),
+            form: None,
         }
     }
 }
 
-fn month_start(d: NaiveDate) -> NaiveDate { d.with_day(1).unwrap() }
+fn month_start(d: NaiveDate) -> NaiveDate {
+    d.with_day(1).unwrap()
+}
 fn month_end(d: NaiveDate) -> NaiveDate {
     let next = if d.month() == 12 {
         NaiveDate::from_ymd_opt(d.year() + 1, 1, 1).unwrap()
@@ -43,8 +47,10 @@ fn month_end(d: NaiveDate) -> NaiveDate {
 
 pub fn category_color(t: &crate::theme::Theme, category: &str) -> Color {
     match category {
-        "work" => t.blue, "personal" => t.green,
-        "health" => t.peach, "deadline" => t.red,
+        "work" => t.blue,
+        "personal" => t.green,
+        "health" => t.peach,
+        "deadline" => t.red,
         _ => t.accent,
     }
 }
@@ -80,7 +86,10 @@ pub fn handle_key(app: &mut App, key: KeyEvent) {
         KeyCode::Char(']') => moved = Some(month_end(c) + Duration::days(1)),
         KeyCode::Char('t') => moved = Some(app.today),
         KeyCode::Char('a') => {
-            app.calendar.form = Some(EventForm { fields: Default::default(), focus: 0 });
+            app.calendar.form = Some(EventForm {
+                fields: Default::default(),
+                focus: 0,
+            });
             app.mode = InputMode::Editing;
         }
         KeyCode::Char('d') => {
@@ -94,30 +103,46 @@ pub fn handle_key(app: &mut App, key: KeyEvent) {
     if let Some(d) = moved {
         let month_changed = d.month() != c.month() || d.year() != c.year();
         app.calendar.cursor = d;
-        if month_changed { app.calendar.load(&app.conn); }
+        if month_changed {
+            app.calendar.load(&app.conn);
+        }
     }
 }
 
 fn form_key(app: &mut App, key: KeyEvent) {
     let form = app.calendar.form.as_mut().unwrap();
     match key.code {
-        KeyCode::Esc => { app.calendar.form = None; app.mode = InputMode::Normal; }
+        KeyCode::Esc => {
+            app.calendar.form = None;
+            app.mode = InputMode::Normal;
+        }
         KeyCode::Tab | KeyCode::Down => form.focus = (form.focus + 1) % 3,
         KeyCode::BackTab | KeyCode::Up => form.focus = (form.focus + 2) % 3,
-        KeyCode::Backspace => { form.fields[form.focus].pop(); }
+        KeyCode::Backspace => {
+            form.fields[form.focus].pop();
+        }
         KeyCode::Enter => {
             let title = form.fields[0].trim().to_string();
-            if title.is_empty() { app.status = Some("title is required".into()); return; }
+            if title.is_empty() {
+                app.status = Some("title is required".into());
+                return;
+            }
             let time = form.fields[1].trim();
             if !time.is_empty() && chrono::NaiveTime::parse_from_str(time, "%H:%M").is_err() {
                 app.status = Some("time must be HH:MM".into());
                 return;
             }
-            let cat = match form.fields[2].trim() { "" => "general", s => s };
+            let cat = match form.fields[2].trim() {
+                "" => "general",
+                s => s,
+            };
             let _ = db::event_add(
-                &app.conn, &title, app.calendar.cursor,
+                &app.conn,
+                &title,
+                app.calendar.cursor,
                 if time.is_empty() { None } else { Some(time) },
-                cat, "themed",
+                cat,
+                "themed",
             );
             app.calendar.form = None;
             app.mode = InputMode::Normal;
@@ -145,8 +170,12 @@ fn month_grid_lines(app: &App, compact: bool) -> Vec<Line<'static>> {
         for _ in 0..7 {
             let in_month = day.month() == cur.month();
             let mut style = Style::default().fg(if in_month { t.text } else { t.muted });
-            if day == app.today { style = style.fg(t.accent).add_modifier(Modifier::BOLD); }
-            if day == cur { style = style.add_modifier(Modifier::REVERSED); }
+            if day == app.today {
+                style = style.fg(t.accent).add_modifier(Modifier::BOLD);
+            }
+            if day == cur {
+                style = style.add_modifier(Modifier::REVERSED);
+            }
             num_spans.push(Span::styled(format!(" {:>2} ", day.day()), style));
 
             let evs = app.calendar.events_on(day);
@@ -154,19 +183,26 @@ fn month_grid_lines(app: &App, compact: bool) -> Vec<Line<'static>> {
             let mut dots = String::new();
             let mut dot_line: Vec<Span> = Vec::new();
             for e in evs.iter().take(3) {
-                dot_line.push(Span::styled("•", Style::default().fg(category_color(&t, &e.category))));
+                dot_line.push(Span::styled(
+                    "•",
+                    Style::default().fg(category_color(&t, &e.category)),
+                ));
                 dots.push('•');
             }
             if due_n > 0 && dots.chars().count() < 3 {
                 dot_line.push(Span::styled("▪", Style::default().fg(t.yellow)));
                 dots.push('▪');
             }
-            for _ in dots.chars().count()..4 { dot_line.push(Span::raw(" ")); }
+            for _ in dots.chars().count()..4 {
+                dot_line.push(Span::raw(" "));
+            }
             dot_spans.extend(dot_line);
             day += Duration::days(1);
         }
         lines.push(Line::from(num_spans));
-        if !compact { lines.push(Line::from(dot_spans)); }
+        if !compact {
+            lines.push(Line::from(dot_spans));
+        }
     }
     lines
 }
@@ -191,27 +227,58 @@ fn agenda_lines(app: &App, day: NaiveDate, header: &str) -> Vec<Line<'static>> {
         ]));
     }
     if out.len() == 1 {
-        out.push(Line::from(Span::styled("   —", Style::default().fg(t.muted))));
+        out.push(Line::from(Span::styled(
+            "   —",
+            Style::default().fg(t.muted),
+        )));
     }
     out
 }
 
 pub fn render_panel(f: &mut Frame, app: &mut App, area: Rect, focused: bool) {
     let cur = app.calendar.cursor;
-    let title = format!("{} {}", ["JAN","FEB","MAR","APR","MAY","JUN","JUL","AUG","SEP","OCT","NOV","DEC"][cur.month0() as usize], cur.year());
+    let title = format!(
+        "{} {}",
+        ["JAN", "FEB", "MAR", "APR", "MAY", "JUN", "JUL", "AUG", "SEP", "OCT", "NOV", "DEC"]
+            [cur.month0() as usize],
+        cur.year()
+    );
     let block = app.theme.panel_block(&title, focused);
-    f.render_widget(Paragraph::new(month_grid_lines(app, true)).block(block), area);
+    f.render_widget(
+        Paragraph::new(month_grid_lines(app, true)).block(block),
+        area,
+    );
 }
 
 pub fn render_zoomed(f: &mut Frame, app: &mut App) {
     let area = f.area();
     f.render_widget(
-        ratatui::widgets::Block::default().style(Style::default().bg(app.theme.bg)), area);
+        ratatui::widgets::Block::default().style(Style::default().bg(app.theme.bg)),
+        area,
+    );
     let rows = Layout::vertical([Constraint::Min(0), Constraint::Length(1)]).split(area);
-    let cols = Layout::horizontal([Constraint::Percentage(55), Constraint::Percentage(45)]).split(rows[0]);
+    let cols =
+        Layout::horizontal([Constraint::Percentage(55), Constraint::Percentage(45)]).split(rows[0]);
 
     let cur = app.calendar.cursor;
-    let title = format!("CALENDAR — {} {}", ["January","February","March","April","May","June","July","August","September","October","November","December"][cur.month0() as usize], cur.year());
+    let title = format!(
+        "CALENDAR — {} {}",
+        [
+            "January",
+            "February",
+            "March",
+            "April",
+            "May",
+            "June",
+            "July",
+            "August",
+            "September",
+            "October",
+            "November",
+            "December"
+        ][cur.month0() as usize],
+        cur.year()
+    );
     f.render_widget(
         Paragraph::new(month_grid_lines(app, false)).block(app.theme.panel_block(&title, true)),
         cols[0],
@@ -221,7 +288,9 @@ pub fn render_zoomed(f: &mut Frame, app: &mut App) {
     agenda.push(Line::raw(""));
     agenda.push(Line::from(Span::styled(
         "NEXT 7 DAYS",
-        Style::default().fg(app.theme.accent).add_modifier(Modifier::BOLD),
+        Style::default()
+            .fg(app.theme.accent)
+            .add_modifier(Modifier::BOLD),
     )));
     for i in 1..=7i64 {
         let d = cur + Duration::days(i);
@@ -257,21 +326,33 @@ fn render_event_form(f: &mut Frame, app: &mut App, screen: Rect) {
     let popup = Rect {
         x: screen.x + (screen.width.saturating_sub(w)) / 2,
         y: screen.y + (screen.height.saturating_sub(7)) / 2,
-        width: w, height: 7,
+        width: w,
+        height: 7,
     };
     f.render_widget(Clear, popup);
-    let block = t.panel_block(&format!("NEW EVENT — {}", app.calendar.cursor), true)
+    let block = t
+        .panel_block(&format!("NEW EVENT — {}", app.calendar.cursor), true)
         .style(Style::default().bg(t.surface));
     let inner = block.inner(popup);
     f.render_widget(block, popup);
-    let mut lines: Vec<Line> = labels.iter().enumerate().map(|(i, label)| {
-        let focused = i == form.focus;
-        let cursor = if focused { "▏" } else { "" };
-        Line::from(vec![
-            Span::styled(format!(" {label:<14}"), Style::default().fg(if focused { t.accent } else { t.muted })),
-            Span::styled(format!("{}{cursor}", form.fields[i]), Style::default().fg(t.text)),
-        ])
-    }).collect();
+    let mut lines: Vec<Line> = labels
+        .iter()
+        .enumerate()
+        .map(|(i, label)| {
+            let focused = i == form.focus;
+            let cursor = if focused { "▏" } else { "" };
+            Line::from(vec![
+                Span::styled(
+                    format!(" {label:<14}"),
+                    Style::default().fg(if focused { t.accent } else { t.muted }),
+                ),
+                Span::styled(
+                    format!("{}{cursor}", form.fields[i]),
+                    Style::default().fg(t.text),
+                ),
+            ])
+        })
+        .collect();
     lines.push(Line::from(Span::styled(
         "  categories: work personal health deadline",
         Style::default().fg(t.muted),
