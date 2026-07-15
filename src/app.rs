@@ -21,6 +21,7 @@ pub struct App {
     pub should_quit: bool,
     pub today: NaiveDate,
     pub status: Option<String>,
+    pub habits: crate::ui::habits::HabitsState,
 }
 
 pub fn screen_for(panel: &str) -> Screen {
@@ -37,7 +38,7 @@ pub fn screen_for(panel: &str) -> Screen {
 impl App {
     pub fn new(conn: Connection, config: Config, status: Option<String>) -> Self {
         let theme = Theme::from_cfg(&config.theme);
-        Self {
+        let mut s = Self {
             conn,
             config,
             theme,
@@ -47,47 +48,75 @@ impl App {
             should_quit: false,
             today: Local::now().date_naive(),
             status,
-        }
+            habits: crate::ui::habits::HabitsState::default(),
+        };
+        s.habits.load(&s.conn, s.today);
+        s
     }
 
     pub fn handle_key(&mut self, key: KeyEvent) {
         self.status = None;
-        // Global keys (Normal mode only; Editing is handled per-module later)
-        if self.mode == InputMode::Normal {
+
+        // Editing mode: dispatch straight to the active module; global keys don't run.
+        if self.mode == InputMode::Editing {
+            match self.screen {
+                Screen::Habits => crate::ui::habits::handle_key(self, key),
+                _ => {}
+            }
+            return;
+        }
+
+        // Global keys (Normal mode only)
+        match key.code {
+            KeyCode::Char('q') => { self.should_quit = true; return; }
+            KeyCode::Esc => { self.screen = Screen::Home; return; }
+            KeyCode::Char(c @ '1'..='6') => {
+                let idx = c as usize - '1' as usize;
+                if let Some(p) = self.config.panels.get(idx) {
+                    self.screen = screen_for(p);
+                }
+                return;
+            }
+            _ => {}
+        }
+
+        if self.screen == Screen::Home {
             match key.code {
-                KeyCode::Char('q') => { self.should_quit = true; return; }
-                KeyCode::Esc => { self.screen = Screen::Home; return; }
-                KeyCode::Char(c @ '1'..='6') => {
-                    let idx = c as usize - '1' as usize;
-                    if let Some(p) = self.config.panels.get(idx) {
-                        self.screen = screen_for(p);
+                KeyCode::Tab => {
+                    self.focus = (self.focus + 1) % self.config.panels.len();
+                }
+                KeyCode::BackTab => {
+                    let n = self.config.panels.len();
+                    self.focus = (self.focus + n - 1) % n;
+                }
+                KeyCode::Enter => {
+                    self.screen = screen_for(&self.config.panels[self.focus].clone());
+                }
+                KeyCode::Char(' ') => {
+                    // Quick action: toggle the focused panel's primary item without zooming in.
+                    if let Some(panel) = self.config.panels.get(self.focus).cloned() {
+                        if screen_for(&panel) == Screen::Habits {
+                            crate::ui::habits::handle_key(self, key);
+                        }
                     }
-                    return;
                 }
                 _ => {}
             }
-            if self.screen == Screen::Home {
-                match key.code {
-                    KeyCode::Tab => {
-                        self.focus = (self.focus + 1) % self.config.panels.len();
-                    }
-                    KeyCode::BackTab => {
-                        let n = self.config.panels.len();
-                        self.focus = (self.focus + n - 1) % n;
-                    }
-                    KeyCode::Enter => {
-                        self.screen = screen_for(&self.config.panels[self.focus].clone());
-                    }
-                    _ => {}
-                }
-            }
+            return;
+        }
+
+        match self.screen {
+            Screen::Habits => crate::ui::habits::handle_key(self, key),
+            _ => {}
         }
     }
 
     pub fn tick(&mut self) {
         let now = Local::now().date_naive();
         if now != self.today {
-            self.today = now; // midnight rollover; modules reload in later tasks
+            self.today = now;
+            self.habits.day = None;
+            self.habits.load(&self.conn, self.today);
         }
     }
 }

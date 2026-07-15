@@ -36,12 +36,16 @@ pub fn render(f: &mut Frame, app: &mut App) {
 }
 
 fn render_panel(f: &mut Frame, app: &mut App, panel: &str, area: Rect, focused: bool) {
+    if panel == "habits" {
+        crate::ui::habits::render_panel(f, app, area, focused);
+        return;
+    }
     let title = match panel {
-        "habits" => "HABITS", "todos" => "TODOS", "calendar" => "CALENDAR",
+        "todos" => "TODOS", "calendar" => "CALENDAR",
         "ideas" => "IDEAS", "pomodoro" => "POMODORO", _ => "STATS",
     };
     let block = app.theme.panel_block(title, focused);
-    // Module panel bodies replace this placeholder in Tasks 3–10.
+    // Module panel bodies replace this placeholder in Tasks 4–10.
     f.render_widget(
         Paragraph::new("…").style(Style::default().fg(app.theme.muted)).block(block),
         area,
