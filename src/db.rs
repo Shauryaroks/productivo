@@ -4,7 +4,7 @@ use rusqlite::Connection;
 use std::error::Error;
 use std::fmt;
 
-use crate::models::{Event, Habit, Todo};
+use crate::models::{Event, Habit, Idea, Todo};
 use crate::recur;
 
 pub struct NewTodo {
@@ -334,6 +334,45 @@ pub fn todos_due_between(conn: &Connection, start: NaiveDate, end: NaiveDate) ->
     rows.collect()
 }
 
+pub fn ideas_list(conn: &Connection) -> rusqlite::Result<Vec<Idea>> {
+    let mut stmt = conn.prepare(
+        "SELECT id, title, body, status, created_at FROM ideas
+         ORDER BY status = 'dropped', created_at DESC",
+    )?;
+    let rows = stmt.query_map([], |r| {
+        Ok(Idea { id: r.get(0)?, title: r.get(1)?, body: r.get(2)?, status: r.get(3)?, created_at: r.get(4)? })
+    })?;
+    rows.collect()
+}
+
+pub fn idea_add(conn: &Connection, title: &str) -> rusqlite::Result<()> {
+    conn.execute(
+        "INSERT INTO ideas (title, created_at) VALUES (?1, ?2)",
+        params![title, chrono::Utc::now().to_rfc3339()],
+    )?;
+    Ok(())
+}
+
+pub fn idea_set_body(conn: &Connection, id: i64, body: &str) -> rusqlite::Result<()> {
+    conn.execute("UPDATE ideas SET body = ?1 WHERE id = ?2", params![body, id])?;
+    Ok(())
+}
+
+const IDEA_STATUSES: [&str; 5] = ["spark", "brewing", "active", "shipped", "dropped"];
+
+pub fn idea_cycle_status(conn: &Connection, id: i64) -> rusqlite::Result<String> {
+    let cur: String = conn.query_row("SELECT status FROM ideas WHERE id = ?1", [id], |r| r.get(0))?;
+    let i = IDEA_STATUSES.iter().position(|s| *s == cur).unwrap_or(0);
+    let next = IDEA_STATUSES[(i + 1) % IDEA_STATUSES.len()].to_string();
+    conn.execute("UPDATE ideas SET status = ?1 WHERE id = ?2", params![next, id])?;
+    Ok(next)
+}
+
+pub fn idea_delete(conn: &Connection, id: i64) -> rusqlite::Result<()> {
+    conn.execute("DELETE FROM ideas WHERE id = ?1", [id])?;
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -477,6 +516,17 @@ mod tests {
         event_add(&c, "outside", d("2026-08-01"), None, "work", "blue").unwrap();
         let ev = events_between(&c, d("2026-07-15"), d("2026-07-31")).unwrap();
         assert_eq!(ev.iter().map(|e| e.title.as_str()).collect::<Vec<_>>(), vec!["a", "b"]);
+    }
+
+    #[test]
+    fn idea_status_cycles_through_all_states() {
+        let c = test_conn();
+        idea_add(&c, "solar tracker").unwrap();
+        let mut seen = vec!["spark".to_string()];
+        for _ in 0..5 {
+            seen.push(idea_cycle_status(&c, 1).unwrap());
+        }
+        assert_eq!(seen, vec!["spark", "brewing", "active", "shipped", "dropped", "spark"]);
     }
 
     #[test]

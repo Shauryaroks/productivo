@@ -48,8 +48,12 @@ fn render_panel(f: &mut Frame, app: &mut App, panel: &str, area: Rect, focused: 
         crate::ui::calendar::render_panel(f, app, area, focused);
         return;
     }
+    if panel == "ideas" {
+        crate::ui::ideas::render_panel(f, app, area, focused);
+        return;
+    }
     let title = match panel {
-        "ideas" => "IDEAS", "pomodoro" => "POMODORO", _ => "STATS",
+        "pomodoro" => "POMODORO", _ => "STATS",
     };
     let block = app.theme.panel_block(title, focused);
     // Module panel bodies replace this placeholder in Tasks 4–10.
