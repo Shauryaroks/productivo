@@ -5,7 +5,7 @@ ideas, pomodoro, and stats — one glanceable home screen, zoom into any panel
 with vim-ish keys. No server, no accounts: everything lives in a local
 SQLite file.
 
-![screenshot placeholder](docs/screenshot.png)
+<!-- screenshot TODO -->
 <!-- TODO: replace with a real screenshot of the home grid -->
 
 ## Install

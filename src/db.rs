@@ -1,6 +1,7 @@
 use chrono::NaiveDate;
 use rusqlite::params;
 use rusqlite::Connection;
+use rusqlite::OptionalExtension;
 use std::error::Error;
 use std::fmt;
 
@@ -279,7 +280,14 @@ pub fn open_subtask_count(conn: &Connection, parent_id: i64) -> rusqlite::Result
     )
 }
 
-pub fn todo_complete(conn: &Connection, id: i64, today: NaiveDate) -> rusqlite::Result<()> {
+/// Marks a todo done. If it carries a valid recur rule, spawns the next
+/// occurrence (always top-level, even if the completed todo was a subtask)
+/// and returns its id.
+pub fn todo_complete(
+    conn: &Connection,
+    id: i64,
+    today: NaiveDate,
+) -> rusqlite::Result<Option<i64>> {
     conn.execute(
         "UPDATE todos SET done_at = ?1 WHERE id = ?2",
         params![chrono::Utc::now().to_rfc3339(), id],
@@ -297,9 +305,10 @@ pub fn todo_complete(conn: &Connection, id: i64, today: NaiveDate) -> rusqlite::
             parent_id: None,
             recur_rule: t.recur_rule.clone(),
         };
-        todo_add(conn, &next)?;
+        Ok(Some(todo_add(conn, &next)?))
+    } else {
+        Ok(None)
     }
-    Ok(())
 }
 
 pub fn todo_uncomplete(conn: &Connection, id: i64) -> rusqlite::Result<()> {
@@ -342,10 +351,16 @@ pub fn events_between(
          WHERE date >= ?1 AND date <= ?2 ORDER BY date, time",
     )?;
     let rows = stmt.query_map(params![start.to_string(), end.to_string()], |r| {
+        // Tolerate a malformed date the way row_to_todo does for due_date: never panic on
+        // bad data, fall back to a safe sentinel instead of aborting the whole query.
+        let date = r
+            .get::<_, String>(2)?
+            .parse()
+            .unwrap_or_else(|_| NaiveDate::from_ymd_opt(1970, 1, 1).unwrap());
         Ok(Event {
             id: r.get(0)?,
             title: r.get(1)?,
-            date: r.get::<_, String>(2)?.parse().unwrap(),
+            date,
             time: r.get(3)?,
             category: r.get(4)?,
             color: r.get(5)?,
@@ -436,10 +451,29 @@ pub fn pomo_finish(conn: &Connection, id: i64, completed: bool) -> rusqlite::Res
     Ok(())
 }
 
+/// Returns the one pomodoro session left running when the app was last closed
+/// (ended_at IS NULL), if any: (id, todo_id, started_at RFC3339, kind).
+#[allow(clippy::type_complexity)]
+pub fn pomo_dangling(
+    conn: &Connection,
+) -> rusqlite::Result<Option<(i64, Option<i64>, String, String)>> {
+    conn.query_row(
+        "SELECT id, todo_id, started_at, kind FROM pomodoros WHERE ended_at IS NULL LIMIT 1",
+        [],
+        |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?)),
+    )
+    .optional()
+}
+
+pub fn todo_title(conn: &Connection, id: i64) -> rusqlite::Result<Option<String>> {
+    conn.query_row("SELECT title FROM todos WHERE id = ?1", [id], |r| r.get(0))
+        .optional()
+}
+
 pub fn pomo_count_today(conn: &Connection, date: NaiveDate) -> rusqlite::Result<u32> {
     conn.query_row(
         "SELECT COUNT(*) FROM pomodoros
-         WHERE kind = 'focus' AND completed = 1 AND date(started_at) = ?1",
+         WHERE kind = 'focus' AND completed = 1 AND date(started_at, 'localtime') = ?1",
         [date.to_string()],
         |r| r.get(0),
     )
@@ -488,9 +522,9 @@ pub fn stat_todo_velocity(
 ) -> rusqlite::Result<Vec<(NaiveDate, u32, u32)>> {
     let mut stmt = conn.prepare(
         "SELECT day, SUM(created), SUM(completed) FROM (
-            SELECT date(created_at) AS day, 1 AS created, 0 AS completed FROM todos WHERE date(created_at) >= ?1
+            SELECT date(created_at, 'localtime') AS day, 1 AS created, 0 AS completed FROM todos WHERE date(created_at, 'localtime') >= ?1
             UNION ALL
-            SELECT date(done_at) AS day, 0, 1 FROM todos WHERE done_at IS NOT NULL AND date(done_at) >= ?1
+            SELECT date(done_at, 'localtime') AS day, 0, 1 FROM todos WHERE done_at IS NOT NULL AND date(done_at, 'localtime') >= ?1
          ) GROUP BY day ORDER BY day",
     )?;
     let rows = stmt.query_map([since.to_string()], |r| {
@@ -511,11 +545,11 @@ pub fn stat_focus_minutes(
     since: NaiveDate,
 ) -> rusqlite::Result<Vec<(NaiveDate, u32)>> {
     let mut stmt = conn.prepare(
-        "SELECT date(started_at),
+        "SELECT date(started_at, 'localtime'),
                 CAST(SUM((julianday(ended_at) - julianday(started_at)) * 1440) AS INTEGER)
          FROM pomodoros
-         WHERE kind = 'focus' AND completed = 1 AND ended_at IS NOT NULL AND date(started_at) >= ?1
-         GROUP BY date(started_at) ORDER BY date(started_at)",
+         WHERE kind = 'focus' AND completed = 1 AND ended_at IS NOT NULL AND date(started_at, 'localtime') >= ?1
+         GROUP BY date(started_at, 'localtime') ORDER BY date(started_at, 'localtime')",
     )?;
     let rows = stmt.query_map([since.to_string()], |r| {
         Ok((r.get::<_, String>(0)?, r.get::<_, u32>(1)?))
@@ -534,7 +568,7 @@ pub fn stat_focus_by_project(
         "SELECT COALESCE(t.project, '(none)') AS proj,
                 CAST(SUM((julianday(p.ended_at) - julianday(p.started_at)) * 1440) AS INTEGER) AS mins
          FROM pomodoros p LEFT JOIN todos t ON t.id = p.todo_id
-         WHERE p.kind = 'focus' AND p.completed = 1 AND p.ended_at IS NOT NULL AND date(p.started_at) >= ?1
+         WHERE p.kind = 'focus' AND p.completed = 1 AND p.ended_at IS NOT NULL AND date(p.started_at, 'localtime') >= ?1
          GROUP BY proj ORDER BY mins DESC",
     )?;
     let rows = stmt.query_map([since.to_string()], |r| Ok((r.get(0)?, r.get(1)?)))?;
@@ -564,12 +598,12 @@ pub fn stat_week(conn: &Connection, week_start: NaiveDate) -> rusqlite::Result<W
         checked * 100 / (habit_count * 7)
     };
     let todos_done: u32 = conn.query_row(
-        "SELECT COUNT(*) FROM todos WHERE done_at IS NOT NULL AND date(done_at) >= ?1 AND date(done_at) <= ?2",
+        "SELECT COUNT(*) FROM todos WHERE done_at IS NOT NULL AND date(done_at, 'localtime') >= ?1 AND date(done_at, 'localtime') <= ?2",
         params![week_start.to_string(), end.to_string()], |r| r.get(0))?;
     let focus_min: u32 = conn.query_row(
         "SELECT COALESCE(CAST(SUM((julianday(ended_at) - julianday(started_at)) * 1440) AS INTEGER), 0)
          FROM pomodoros WHERE kind = 'focus' AND completed = 1 AND ended_at IS NOT NULL
-           AND date(started_at) >= ?1 AND date(started_at) <= ?2",
+           AND date(started_at, 'localtime') >= ?1 AND date(started_at, 'localtime') <= ?2",
         params![week_start.to_string(), end.to_string()], |r| r.get(0))?;
     Ok(WeekStats {
         habit_pct,
@@ -683,6 +717,54 @@ mod tests {
         assert_eq!(open[0].due_date, Some(d("2026-07-18")));
         assert_eq!(open[0].recur_rule.as_deref(), Some("every:3d"));
         assert!(open[0].id != id);
+    }
+
+    #[test]
+    fn todo_complete_returns_spawned_id_that_exists() {
+        let c = test_conn();
+        let mut t = new_todo("water plants");
+        t.recur_rule = Some("daily".into());
+        let id = todo_add(&c, &t).unwrap();
+        let spawned = todo_complete(&c, id, d("2026-07-15")).unwrap();
+        let spawned_id = spawned.expect("recurring todo should return the spawned id");
+        assert!(
+            todos_open(&c).unwrap().iter().any(|t| t.id == spawned_id),
+            "spawned occurrence should exist and be open"
+        );
+    }
+
+    #[test]
+    fn todo_complete_with_garbage_recur_rule_spawns_nothing() {
+        let c = test_conn();
+        let id = todo_add(&c, &new_todo("bogus rule")).unwrap();
+        // simulate data that predates validation, or was edited outside the app
+        c.execute(
+            "UPDATE todos SET recur_rule = 'monthly' WHERE id = ?1",
+            [id],
+        )
+        .unwrap();
+        let spawned = todo_complete(&c, id, d("2026-07-15")).unwrap();
+        assert_eq!(spawned, None);
+        assert!(todos_open(&c).unwrap().is_empty());
+    }
+
+    #[test]
+    fn todo_complete_recurring_subtask_spawns_top_level_occurrence() {
+        let c = test_conn();
+        let parent = todo_add(&c, &new_todo("parent")).unwrap();
+        let mut sub = new_todo("child");
+        sub.parent_id = Some(parent);
+        sub.recur_rule = Some("daily".into());
+        let sid = todo_add(&c, &sub).unwrap();
+        let spawned = todo_complete(&c, sid, d("2026-07-15"))
+            .unwrap()
+            .expect("recurring subtask should spawn a next occurrence");
+        let open = todos_open(&c).unwrap();
+        let next = open
+            .iter()
+            .find(|t| t.id == spawned)
+            .expect("spawned occurrence should be top-level and open");
+        assert_eq!(next.parent_id, None);
     }
 
     #[test]

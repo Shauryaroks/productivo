@@ -1,4 +1,4 @@
-use chrono::{Duration, Utc};
+use chrono::{DateTime, Duration, Utc};
 use crossterm::event::{KeyCode, KeyEvent};
 use ratatui::layout::{Alignment, Constraint, Layout, Rect};
 use ratatui::style::{Color, Style};
@@ -59,16 +59,57 @@ impl PomodoroState {
     }
 }
 
+/// Called once on startup (after `PomodoroState::load`) to recover a session that
+/// was still running (`ended_at IS NULL`) when the app last closed. If it would
+/// already have finished by now, it's simply marked completed instead — its pause
+/// state (if any) is not recoverable, which is acceptable.
+pub fn restore_dangling(app: &mut App) {
+    let Ok(Some((id, todo_id, started_at, kind_str))) = crate::db::pomo_dangling(&app.conn) else {
+        return;
+    };
+    let kind = if kind_str == "focus" {
+        Kind::Focus
+    } else {
+        Kind::Break
+    };
+    let Ok(started_at) = started_at.parse::<DateTime<Utc>>() else {
+        // Can't trust an unparseable timestamp — close the session out rather than panic.
+        let _ = crate::db::pomo_finish(&app.conn, id, true);
+        return;
+    };
+    let minutes = match kind {
+        Kind::Focus => app.config.pomodoro.focus_min,
+        Kind::Break => app.config.pomodoro.break_min,
+    };
+    let duration = Duration::minutes(minutes as i64);
+    if started_at + duration > Utc::now() {
+        let todo_title =
+            todo_id.and_then(|tid| crate::db::todo_title(&app.conn, tid).ok().flatten());
+        app.pomodoro.active = Some(ActiveSession {
+            db_id: id,
+            kind,
+            todo_title,
+            started_at,
+            duration,
+            paused_at: None,
+        });
+    } else {
+        let _ = crate::db::pomo_finish(&app.conn, id, true);
+    }
+}
+
+/// Starts a session and persists it to the DB. Returns whether the DB insert
+/// succeeded — callers should only report success (status line, etc.) when true.
 fn start_session(
     app: &mut App,
     kind: Kind,
     minutes: u64,
     todo_id: Option<i64>,
     todo_title: Option<String>,
-) {
+) -> bool {
     let db_id = match crate::db::pomo_start(&app.conn, todo_id, kind.as_str()) {
         Ok(id) => id,
-        Err(_) => return,
+        Err(_) => return false,
     };
     app.pomodoro.active = Some(ActiveSession {
         db_id,
@@ -79,6 +120,7 @@ fn start_session(
         paused_at: None,
     });
     app.pomodoro.suggest_break = false;
+    true
 }
 
 /// Starts a Focus session, optionally linked to a todo. Callable from todos.rs.
@@ -89,10 +131,10 @@ pub fn start(app: &mut App, todo_id: Option<i64>, todo_title: Option<String>) {
         return;
     }
     let minutes = app.config.pomodoro.focus_min;
-    start_session(app, Kind::Focus, minutes, todo_id, todo_title.clone());
-    // Set status message on success
-    let title_str = todo_title.unwrap_or_else(|| "focus".to_string());
-    app.status = Some(format!("⏱ pomodoro started: {title_str}"));
+    let title_str = todo_title.clone().unwrap_or_else(|| "focus".to_string());
+    if start_session(app, Kind::Focus, minutes, todo_id, todo_title) {
+        app.status = Some(format!("⏱ pomodoro started: {title_str}"));
+    }
 }
 
 pub fn handle_key(app: &mut App, key: KeyEvent) {

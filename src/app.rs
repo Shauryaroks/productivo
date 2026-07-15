@@ -76,6 +76,7 @@ impl App {
         s.calendar.load(&s.conn);
         s.ideas.load(&s.conn);
         s.pomodoro.load(&s.conn, s.today);
+        crate::ui::pomodoro::restore_dangling(&mut s);
         s
     }
 

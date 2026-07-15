@@ -43,7 +43,8 @@ pub struct TodosState {
     pub filter_editing: bool,
     pub form: Option<TodoForm>,
     pub expanded: Option<i64>,
-    pub last_completed: Option<i64>,
+    /// (completed todo id, spawned next-occurrence id if recurring) — lets `u` undo both.
+    pub last_completed: Option<(i64, Option<i64>)>,
 }
 
 impl TodosState {
@@ -136,13 +137,27 @@ pub fn handle_key(app: &mut App, key: KeyEvent) {
         }
         KeyCode::Char(' ') | KeyCode::Char('x') if n > 0 => {
             let row = &app.todos.items[app.todos.selected];
+            if row.todo.done_at.is_some() {
+                // already completed (only reachable for an expanded, done subtask) — no-op
+                return;
+            }
             let (id, recurring, parent) = (
                 row.todo.id,
                 row.todo.recur_rule.is_some(),
                 row.todo.parent_id,
             );
-            let _ = db::todo_complete(&app.conn, id, app.today);
-            app.todos.last_completed = Some(id);
+            // completing a top-level todo with open subtasks would orphan them — refuse
+            if parent.is_none() {
+                if let Ok((open, _)) = db::open_subtask_count(&app.conn, id) {
+                    if open > 0 {
+                        app.status =
+                            Some(format!("{open} subtasks still open — finish them first"));
+                        return;
+                    }
+                }
+            }
+            let spawned = db::todo_complete(&app.conn, id, app.today).unwrap_or(None);
+            app.todos.last_completed = Some((id, spawned));
             if recurring {
                 app.status = Some("↻ next occurrence scheduled".into());
             }
@@ -156,8 +171,11 @@ pub fn handle_key(app: &mut App, key: KeyEvent) {
             app.calendar.load(&app.conn);
         }
         KeyCode::Char('u') => {
-            if let Some(id) = app.todos.last_completed.take() {
+            if let Some((id, spawned)) = app.todos.last_completed.take() {
                 let _ = db::todo_uncomplete(&app.conn, id);
+                if let Some(sid) = spawned {
+                    let _ = db::todo_delete(&app.conn, sid);
+                }
                 app.todos.load(&app.conn);
                 app.calendar.load(&app.conn);
             }
