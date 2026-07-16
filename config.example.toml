@@ -17,6 +17,11 @@ panels = ["habits", "pomodoro", "ideas", "todos", "calendar", "stats"]
 [pomodoro]
 focus_min = 25
 break_min = 5
+# Sound file played when a timer ends (wav/ogg/mp3 — whatever your system
+# player supports; tries paplay, pw-play, aplay, afplay). Unset = terminal bell.
+# sound = "/home/you/sounds/chime.wav"
+
+# In the app: +/- adjusts focus length, [/] adjusts break length (next session).
 
 [theme]
 # Optional hex overrides (defaults: Catppuccin Mocha)

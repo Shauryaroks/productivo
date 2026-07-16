@@ -83,6 +83,12 @@ are attached to each [GitHub release](../../releases).
 | `s` | Start a focus session (or the suggested break once one finishes) |
 | `space` | Pause / resume |
 | `x` | Abandon the running session |
+| `+` / `-` | Focus length ±5 min (applies to the next session) |
+| `]` / `[` | Break length ±1 min |
+
+Startup defaults live in `config.toml` (`[pomodoro] focus_min / break_min`),
+and `sound = "/path/to/chime.wav"` plays a sound file when a timer ends
+(via `paplay`/`pw-play`/`aplay`/`afplay`; unset = terminal bell).
 
 ### Stats
 

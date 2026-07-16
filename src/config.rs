@@ -13,6 +13,9 @@ pub struct Config {
 pub struct PomodoroCfg {
     pub focus_min: u64,
     pub break_min: u64,
+    /// Path to a sound file (e.g. .wav) played when a timer ends.
+    /// Unset → terminal bell.
+    pub sound: Option<String>,
 }
 
 #[derive(Deserialize, Debug, Clone, Default)]
@@ -46,6 +49,7 @@ impl Default for PomodoroCfg {
         Self {
             focus_min: 25,
             break_min: 5,
+            sound: None,
         }
     }
 }

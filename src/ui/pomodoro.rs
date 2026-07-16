@@ -51,6 +51,8 @@ pub struct PomodoroState {
     pub active: Option<ActiveSession>,
     pub today_count: u32,
     pub suggest_break: bool,
+    /// Spawned sound player, kept so it can be reaped (no zombie processes).
+    pub sound_child: Option<std::process::Child>,
 }
 
 impl PomodoroState {
@@ -163,12 +165,67 @@ pub fn handle_key(app: &mut App, key: KeyEvent) {
                 let _ = crate::db::pomo_finish(&app.conn, active.db_id, false);
             }
         }
+        // Live duration tuning — applies to the NEXT session; config.toml sets
+        // the startup defaults.
+        KeyCode::Char('+') | KeyCode::Char('=') => {
+            app.config.pomodoro.focus_min = (app.config.pomodoro.focus_min + 5).min(120);
+            app.status = Some(format!("focus length: {}m", app.config.pomodoro.focus_min));
+        }
+        KeyCode::Char('-') => {
+            app.config.pomodoro.focus_min = app.config.pomodoro.focus_min.saturating_sub(5).max(5);
+            app.status = Some(format!("focus length: {}m", app.config.pomodoro.focus_min));
+        }
+        KeyCode::Char(']') => {
+            app.config.pomodoro.break_min = (app.config.pomodoro.break_min + 1).min(60);
+            app.status = Some(format!("break length: {}m", app.config.pomodoro.break_min));
+        }
+        KeyCode::Char('[') => {
+            app.config.pomodoro.break_min = app.config.pomodoro.break_min.saturating_sub(1).max(1);
+            app.status = Some(format!("break length: {}m", app.config.pomodoro.break_min));
+        }
         _ => {}
     }
 }
 
+/// Timer-end alert: play the configured sound file via the first available
+/// system player, terminal bell otherwise. Fire-and-forget child process —
+/// reaped on later ticks via `sound_child`.
+fn ring(app: &mut App) {
+    // Reap/replace any previous player first.
+    if let Some(mut old) = app.pomodoro.sound_child.take() {
+        let _ = old.kill();
+        let _ = old.wait();
+    }
+    if let Some(path) = app.config.pomodoro.sound.clone() {
+        // ponytail: shelling out beats an audio-crate dependency tree; covers
+        // PipeWire/Pulse/ALSA/macOS. Swap for rodio if portability ever bites.
+        for player in ["paplay", "pw-play", "aplay", "afplay"] {
+            if let Ok(child) = std::process::Command::new(player)
+                .arg(&path)
+                .stdout(std::process::Stdio::null())
+                .stderr(std::process::Stdio::null())
+                .spawn()
+            {
+                app.pomodoro.sound_child = Some(child);
+                return;
+            }
+        }
+        app.status = Some("no audio player found (tried paplay/pw-play/aplay/afplay)".into());
+    }
+    print!("\x07");
+    let _ = std::io::stdout().flush();
+}
+
 /// Called from App::tick — checks for completion, rings the bell, and updates state.
 pub fn on_tick(app: &mut App) {
+    // Reap a finished sound player (runs even with no active session —
+    // the sound outlives the session that triggered it).
+    if let Some(child) = app.pomodoro.sound_child.as_mut() {
+        if matches!(child.try_wait(), Ok(Some(_))) {
+            app.pomodoro.sound_child = None;
+        }
+    }
+
     let now = Utc::now();
     let Some(active) = &app.pomodoro.active else {
         return;
@@ -179,8 +236,6 @@ pub fn on_tick(app: &mut App) {
     let db_id = active.db_id;
     let kind = active.kind;
     let _ = crate::db::pomo_finish(&app.conn, db_id, true);
-    print!("\x07");
-    let _ = std::io::stdout().flush();
     match kind {
         Kind::Focus => {
             app.pomodoro.today_count =
@@ -196,6 +251,8 @@ pub fn on_tick(app: &mut App) {
         }
     }
     app.pomodoro.active = None;
+    // After the status so a "no audio player" warning wins the hint bar.
+    ring(app);
 }
 
 // 3x5 block-character digit font for 0-9 and ':' (index 10).
@@ -388,10 +445,12 @@ pub fn render_zoomed(f: &mut Frame, app: &mut App) {
         content[1],
     );
 
-    let hint = app
-        .status
-        .clone()
-        .unwrap_or_else(|| " s start · space pause · x abandon · esc home ".into());
+    let hint = app.status.clone().unwrap_or_else(|| {
+        format!(
+            " s start · space pause · x abandon · +/- focus {}m · [/] break {}m · esc home ",
+            app.config.pomodoro.focus_min, app.config.pomodoro.break_min
+        )
+    });
     f.render_widget(Paragraph::new(hint).style(app.theme.hint()), rows[1]);
 }
 
