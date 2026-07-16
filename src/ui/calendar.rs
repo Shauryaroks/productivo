@@ -252,10 +252,6 @@ pub fn render_panel(f: &mut Frame, app: &mut App, area: Rect, focused: bool) {
 
 pub fn render_zoomed(f: &mut Frame, app: &mut App) {
     let area = f.area();
-    f.render_widget(
-        ratatui::widgets::Block::default().style(Style::default().bg(app.theme.bg)),
-        area,
-    );
     let rows = Layout::vertical([Constraint::Min(0), Constraint::Length(1)]).split(area);
     let cols =
         Layout::horizontal([Constraint::Percentage(55), Constraint::Percentage(45)]).split(rows[0]);

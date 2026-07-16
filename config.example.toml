@@ -3,9 +3,16 @@
 #   macOS:   ~/Library/Application Support/productivo/config.toml
 #   Windows: %APPDATA%\productivo\config\config.toml
 
-# Home-screen panel order: first three fill the left column top-to-bottom,
-# next three fill the right column.
-panels = ["habits", "calendar", "ideas", "todos", "pomodoro", "stats"]
+# Home-screen panel order — panels fill bento slots by position:
+#   1st: left rail top        2nd: left rail middle (slim strip)
+#   3rd: left rail bottom     4th: center hero (largest)
+#   5th: right top            6th: right bottom
+# On terminals narrower than 110 columns the layout degrades to an equal
+# 2x3 grid (first three = left column, last three = right column).
+panels = ["habits", "pomodoro", "ideas", "todos", "calendar", "stats"]
+
+# The app never paints a background — set your terminal emulator's opacity
+# (e.g. alacritty/kitty background_opacity) for the translucent glass look.
 
 [pomodoro]
 focus_min = 25

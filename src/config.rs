@@ -30,7 +30,9 @@ pub struct ThemeCfg {
 impl Default for Config {
     fn default() -> Self {
         Self {
-            panels: ["habits", "calendar", "ideas", "todos", "pomodoro", "stats"]
+            // Bento slot order: rail-top, rail-middle (slim), rail-bottom,
+            // center hero, right-top, right-bottom.
+            panels: ["habits", "pomodoro", "ideas", "todos", "calendar", "stats"]
                 .map(String::from)
                 .to_vec(),
             pomodoro: PomodoroCfg::default(),

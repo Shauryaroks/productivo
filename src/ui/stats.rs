@@ -131,10 +131,6 @@ pub fn render_panel(f: &mut Frame, app: &mut App, area: Rect, focused: bool) {
 
 pub fn render_zoomed(f: &mut Frame, app: &mut App) {
     let area = f.area();
-    f.render_widget(
-        ratatui::widgets::Block::default().style(Style::default().bg(app.theme.bg)),
-        area,
-    );
     let rows = Layout::vertical([Constraint::Min(0), Constraint::Length(1)]).split(area);
 
     let title = format!("STATS — {}", app.stats.range.label());
@@ -348,7 +344,7 @@ fn render_focus(f: &mut Frame, app: &mut App, area: Rect) {
         .bar_width(3)
         .bar_gap(1)
         .bar_style(Style::default().fg(t.peach))
-        .value_style(Style::default().fg(t.bg).bg(t.peach))
+        .value_style(Style::default().fg(t.surface).bg(t.peach))
         .label_style(Style::default().fg(t.muted));
     f.render_widget(chart, rows[0]);
 

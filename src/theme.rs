@@ -4,8 +4,10 @@ use ratatui::widgets::{Block, BorderType, Borders};
 use crate::config::ThemeCfg;
 
 #[derive(Clone, Copy)]
+// Deliberately no `bg`: cells are left unpainted (terminal default background),
+// so a translucent terminal emulator shows through — the "glass" look. Only
+// `surface` paints solid fills (form popups) for legibility over any wallpaper.
 pub struct Theme {
-    pub bg: Color,
     pub surface: Color,
     pub text: Color,
     pub muted: Color,
@@ -22,7 +24,6 @@ impl Default for Theme {
     // Catppuccin Mocha — calm, high-contrast, terminal-native
     fn default() -> Self {
         Self {
-            bg: Color::Rgb(30, 30, 46),
             surface: Color::Rgb(49, 50, 68),
             text: Color::Rgb(205, 214, 244),
             muted: Color::Rgb(127, 132, 156),
