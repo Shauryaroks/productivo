@@ -158,33 +158,44 @@ pub fn render_panel(f: &mut Frame, app: &mut App, area: Rect, focused: bool) {
     let t = app.theme;
     // Date only when the panel is wide enough for title + date to fit cleanly.
     let show_date = area.width >= 44;
-    let take = area.height.saturating_sub(2) as usize;
-    let lines: Vec<Line> = app
-        .ideas
-        .items
-        .iter()
-        .take(take.max(1))
-        .enumerate()
-        .map(|(i, idea)| {
-            let (mark, mark_color) = badge(&t, &idea.status);
-            let mut title_style = Style::default().fg(t.text);
-            if focused && i == app.ideas.selected {
-                title_style = title_style.add_modifier(Modifier::REVERSED);
+    let max_lines = (area.height.saturating_sub(2) as usize).max(1);
+    let mut lines: Vec<Line> = Vec::new();
+    for (i, idea) in app.ideas.items.iter().enumerate() {
+        if lines.len() >= max_lines {
+            break;
+        }
+        let (mark, mark_color) = badge(&t, &idea.status);
+        let mut title_style = Style::default().fg(t.text);
+        if focused && i == app.ideas.selected {
+            title_style = title_style.add_modifier(Modifier::REVERSED);
+        }
+        let mut spans = vec![
+            Span::styled(format!(" {mark} "), Style::default().fg(mark_color)),
+            Span::styled(idea.title.clone(), title_style),
+        ];
+        if show_date {
+            let date = idea.created_at.get(0..10).unwrap_or(&idea.created_at);
+            spans.push(Span::styled(
+                format!("  {date}"),
+                Style::default().fg(t.muted),
+            ));
+        }
+        lines.push(Line::from(spans));
+
+        // One-line snapshot of the idea body under its heading.
+        if !idea.body.is_empty() && lines.len() < max_lines {
+            let width = (area.width.saturating_sub(8) as usize).max(4);
+            let first = idea.body.lines().next().unwrap_or("");
+            let mut snap: String = first.chars().take(width).collect();
+            if first.chars().count() > width {
+                snap.push('…');
             }
-            let mut spans = vec![
-                Span::styled(format!(" {mark} "), Style::default().fg(mark_color)),
-                Span::styled(idea.title.clone(), title_style),
-            ];
-            if show_date {
-                let date = idea.created_at.get(0..10).unwrap_or(&idea.created_at);
-                spans.push(Span::styled(
-                    format!("  {date}"),
-                    Style::default().fg(t.muted),
-                ));
-            }
-            Line::from(spans)
-        })
-        .collect();
+            lines.push(Line::from(Span::styled(
+                format!("    {snap}"),
+                Style::default().fg(t.muted).add_modifier(Modifier::ITALIC),
+            )));
+        }
+    }
     f.render_widget(Paragraph::new(lines).block(block), area);
 }
 
