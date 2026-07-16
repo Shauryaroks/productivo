@@ -1,9 +1,9 @@
 use chrono::{DateTime, Duration, Utc};
 use crossterm::event::{KeyCode, KeyEvent};
 use ratatui::layout::{Alignment, Constraint, Layout, Rect};
-use ratatui::style::{Color, Style};
-use ratatui::text::Line;
-use ratatui::widgets::Paragraph;
+use ratatui::style::{Color, Modifier, Style};
+use ratatui::text::{Line, Span};
+use ratatui::widgets::{Clear, Paragraph};
 use ratatui::Frame;
 use std::io::Write;
 
@@ -251,6 +251,68 @@ fn active_color(app: &App) -> Color {
             Kind::Break => app.theme.peach,
         }
     }
+}
+
+/// Floating timer card, pinned top-right over any screen while a session is
+/// active — popup-styled like the add forms so the countdown is always visible.
+pub fn render_floating(f: &mut Frame, app: &mut App) {
+    let Some(active) = &app.pomodoro.active else {
+        return;
+    };
+    let t = app.theme;
+    let screen = f.area();
+    if screen.width < 40 || screen.height < 8 {
+        return;
+    }
+
+    let (mm, ss) = mmss(active.remaining(Utc::now()));
+    let state = if active.paused_at.is_some() {
+        "paused"
+    } else {
+        active.kind.as_str()
+    };
+    let title_line = format!("⏱ {mm:02}:{ss:02} · {state}");
+    let todo_line = active.todo_title.clone();
+
+    let w = (title_line
+        .chars()
+        .count()
+        .max(todo_line.as_deref().map(|s| s.chars().count()).unwrap_or(0)) as u16
+        + 4)
+    .clamp(18, 34);
+    let h = if todo_line.is_some() { 4 } else { 3 };
+    let card = Rect {
+        x: screen.x + screen.width - w - 2,
+        y: screen.y + 1,
+        width: w,
+        height: h,
+    };
+    f.render_widget(Clear, card);
+    let block = t
+        .panel_block("POMODORO", false)
+        .border_style(Style::default().fg(active_color(app)))
+        .style(Style::default().bg(t.surface));
+    let inner = block.inner(card);
+    f.render_widget(block, card);
+
+    let mut lines = vec![Line::from(Span::styled(
+        format!(" {title_line}"),
+        Style::default()
+            .fg(active_color(app))
+            .add_modifier(Modifier::BOLD),
+    ))];
+    if let Some(title) = todo_line {
+        let max = inner.width.saturating_sub(3) as usize;
+        let mut s: String = title.chars().take(max).collect();
+        if title.chars().count() > max {
+            s.push('…');
+        }
+        lines.push(Line::from(Span::styled(
+            format!(" {s}"),
+            Style::default().fg(t.text),
+        )));
+    }
+    f.render_widget(Paragraph::new(lines), inner);
 }
 
 pub fn render_panel(f: &mut Frame, app: &mut App, area: Rect, focused: bool) {
