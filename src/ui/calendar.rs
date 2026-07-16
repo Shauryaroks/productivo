@@ -153,12 +153,16 @@ fn form_key(app: &mut App, key: KeyEvent) {
     }
 }
 
-fn month_grid_lines(app: &App, compact: bool) -> Vec<Line<'static>> {
+fn month_grid_lines(app: &App, compact: bool, cell_w: usize) -> Vec<Line<'static>> {
     let t = app.theme;
     let cur = app.calendar.cursor;
     let start = month_start(cur);
+    let header: String = ["Mo", "Tu", "We", "Th", "Fr", "Sa", "Su"]
+        .iter()
+        .map(|d| format!("{d:^cell_w$}"))
+        .collect();
     let mut lines = vec![Line::from(Span::styled(
-        " Mo  Tu  We  Th  Fr  Sa  Su",
+        header,
         Style::default().fg(t.muted).add_modifier(Modifier::BOLD),
     ))];
     let lead = start.weekday().num_days_from_monday() as i64;
@@ -176,27 +180,34 @@ fn month_grid_lines(app: &App, compact: bool) -> Vec<Line<'static>> {
             if day == cur {
                 style = style.add_modifier(Modifier::REVERSED);
             }
-            num_spans.push(Span::styled(format!(" {:>2} ", day.day()), style));
+            num_spans.push(Span::styled(
+                format!("{:^cell_w$}", format!("{:>2}", day.day())),
+                style,
+            ));
 
             let evs = app.calendar.events_on(day);
             let due_n = app.calendar.due_on(day).len();
-            let mut dots = String::new();
             let mut dot_line: Vec<Span> = Vec::new();
+            let mut count = 0usize;
             for e in evs.iter().take(3) {
                 dot_line.push(Span::styled(
                     "•",
                     Style::default().fg(category_color(&t, &e.category)),
                 ));
-                dots.push('•');
+                count += 1;
             }
-            if due_n > 0 && dots.chars().count() < 3 {
+            if due_n > 0 && count < 3 {
                 dot_line.push(Span::styled("▪", Style::default().fg(t.yellow)));
-                dots.push('▪');
+                count += 1;
             }
-            for _ in dots.chars().count()..4 {
-                dot_line.push(Span::raw(" "));
-            }
-            dot_spans.extend(dot_line);
+            // Center the dots within the cell.
+            let lead_pad = cell_w.saturating_sub(count) / 2;
+            let mut cell: Vec<Span> = vec![Span::raw(" ".repeat(lead_pad))];
+            cell.extend(dot_line);
+            cell.push(Span::raw(
+                " ".repeat(cell_w.saturating_sub(lead_pad + count)),
+            ));
+            dot_spans.extend(cell);
             day += Duration::days(1);
         }
         lines.push(Line::from(num_spans));
@@ -244,10 +255,27 @@ pub fn render_panel(f: &mut Frame, app: &mut App, area: Rect, focused: bool) {
         cur.year()
     );
     let block = app.theme.panel_block(&title, focused);
-    f.render_widget(
-        Paragraph::new(month_grid_lines(app, true)).block(block),
-        area,
-    );
+    let inner = block.inner(area);
+    f.render_widget(block, area);
+    // Show event-dot rows whenever the slot is tall enough (13 lines covers a
+    // 6-week month with dots); center the grid either way.
+    let compact = inner.height < 13;
+    let cell_w = if inner.width >= 42 { 5 } else { 4 };
+    render_centered_grid(f, app, inner, compact, cell_w);
+}
+
+/// Render the month grid centered (both axes) inside `inner`.
+fn render_centered_grid(f: &mut Frame, app: &mut App, inner: Rect, compact: bool, cell_w: usize) {
+    let lines = month_grid_lines(app, compact, cell_w);
+    let grid_w = (7 * cell_w) as u16;
+    let grid_h = lines.len() as u16;
+    let area = Rect {
+        x: inner.x + inner.width.saturating_sub(grid_w) / 2,
+        y: inner.y + inner.height.saturating_sub(grid_h) / 2,
+        width: grid_w.min(inner.width),
+        height: grid_h.min(inner.height),
+    };
+    f.render_widget(Paragraph::new(lines), area);
 }
 
 pub fn render_zoomed(f: &mut Frame, app: &mut App) {
@@ -275,10 +303,12 @@ pub fn render_zoomed(f: &mut Frame, app: &mut App) {
         ][cur.month0() as usize],
         cur.year()
     );
-    f.render_widget(
-        Paragraph::new(month_grid_lines(app, false)).block(app.theme.panel_block(&title, true)),
-        cols[0],
-    );
+    let block = app.theme.panel_block(&title, true);
+    let inner = block.inner(cols[0]);
+    f.render_widget(block, cols[0]);
+    // Adaptive cell width, grid centered in the pane instead of hugging the corner.
+    let cell_w = (inner.width as usize / 7).clamp(4, 7);
+    render_centered_grid(f, app, inner, false, cell_w);
 
     let mut agenda = agenda_lines(app, cur, &format!("{} · {}", cur.weekday(), cur));
     agenda.push(Line::raw(""));
@@ -314,7 +344,7 @@ pub fn render_zoomed(f: &mut Frame, app: &mut App) {
     }
 }
 
-fn render_event_form(f: &mut Frame, app: &mut App, screen: Rect) {
+pub fn render_event_form(f: &mut Frame, app: &mut App, screen: Rect) {
     let form = app.calendar.form.as_ref().unwrap();
     let t = app.theme;
     let labels = ["title", "time (HH:MM)", "category"];

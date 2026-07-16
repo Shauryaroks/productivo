@@ -120,13 +120,33 @@ pub fn render_panel(f: &mut Frame, app: &mut App, area: Rect, focused: bool) {
     let focus_line = format!("focus {} today", fmt_hm(focus_today));
 
     let t = app.theme;
+    let block = t.panel_block("STATS", focused);
+    let inner = block.inner(area);
+    f.render_widget(block, area);
+
+    // Tall panel (bento right-bottom): show the real visualizations instead of
+    // three summary lines — heatmap and focus bars scale to the space.
+    if inner.height >= 16 {
+        let parts =
+            Layout::vertical([Constraint::Percentage(50), Constraint::Percentage(50)]).split(inner);
+        // ponytail: a Week-range heatmap is 2 lonely columns on a wide home
+        // panel — render the home heatmap at Month minimum, restore after.
+        let saved = app.stats.range;
+        if saved == Range::Week {
+            app.stats.range = Range::Month;
+        }
+        render_heatmap(f, app, parts[0]);
+        app.stats.range = saved;
+        render_focus(f, app, parts[1]);
+        return;
+    }
+
     let lines = vec![
         Line::styled(streak_line, Style::default().fg(t.peach)),
         Line::styled(spark, Style::default().fg(t.green)),
         Line::styled(focus_line, Style::default().fg(t.text)),
     ];
-    let block = t.panel_block("STATS", focused);
-    f.render_widget(Paragraph::new(lines).block(block), area);
+    f.render_widget(Paragraph::new(lines), inner);
 }
 
 pub fn render_zoomed(f: &mut Frame, app: &mut App) {

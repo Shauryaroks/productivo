@@ -80,18 +80,41 @@ impl App {
         s
     }
 
+    /// The module keys act on: the zoomed screen, or the focused Home panel.
+    /// Panels are fully interactive from Home — zooming is optional.
+    pub fn active_module(&self) -> Screen {
+        if self.screen == Screen::Home {
+            screen_for(
+                self.config
+                    .panels
+                    .get(self.focus)
+                    .map(String::as_str)
+                    .unwrap_or("stats"),
+            )
+        } else {
+            self.screen
+        }
+    }
+
+    fn dispatch_module(&mut self, module: Screen, key: KeyEvent) {
+        match module {
+            Screen::Habits => crate::ui::habits::handle_key(self, key),
+            Screen::Todos => crate::ui::todos::handle_key(self, key),
+            Screen::Calendar => crate::ui::calendar::handle_key(self, key),
+            Screen::Ideas => crate::ui::ideas::handle_key(self, key),
+            Screen::Pomodoro => crate::ui::pomodoro::handle_key(self, key),
+            Screen::Stats => crate::ui::stats::handle_key(self, key),
+            Screen::Home => {}
+        }
+    }
+
     pub fn handle_key(&mut self, key: KeyEvent) {
         self.status = None;
 
         // Editing mode: dispatch straight to the active module; global keys don't run.
         if self.mode == InputMode::Editing {
-            match self.screen {
-                Screen::Habits => crate::ui::habits::handle_key(self, key),
-                Screen::Todos => crate::ui::todos::handle_key(self, key),
-                Screen::Calendar => crate::ui::calendar::handle_key(self, key),
-                Screen::Ideas => crate::ui::ideas::handle_key(self, key),
-                _ => {}
-            }
+            let module = self.active_module();
+            self.dispatch_module(module, key);
             return;
         }
 
@@ -102,8 +125,16 @@ impl App {
                 return;
             }
             KeyCode::Esc => {
-                self.reset_habits_day_if_leaving();
-                self.screen = Screen::Home;
+                if self.screen == Screen::Home {
+                    // On Home Esc clears the habits yesterday-view if set.
+                    if self.habits.day.is_some() {
+                        self.habits.day = None;
+                        self.habits.load(&self.conn, self.today);
+                    }
+                } else {
+                    self.reset_habits_day_if_leaving();
+                    self.screen = Screen::Home;
+                }
                 return;
             }
             KeyCode::Char(c @ '1'..='6') => {
@@ -129,28 +160,16 @@ impl App {
                 KeyCode::Enter => {
                     self.screen = screen_for(&self.config.panels[self.focus].clone());
                 }
-                KeyCode::Char(' ') => {
-                    // Quick action: toggle the focused panel's primary item without zooming in.
-                    if let Some(panel) = self.config.panels.get(self.focus).cloned() {
-                        if screen_for(&panel) == Screen::Habits {
-                            crate::ui::habits::handle_key(self, key);
-                        }
-                    }
+                // Everything else acts on the focused panel in place.
+                _ => {
+                    let module = self.active_module();
+                    self.dispatch_module(module, key);
                 }
-                _ => {}
             }
             return;
         }
 
-        match self.screen {
-            Screen::Habits => crate::ui::habits::handle_key(self, key),
-            Screen::Todos => crate::ui::todos::handle_key(self, key),
-            Screen::Calendar => crate::ui::calendar::handle_key(self, key),
-            Screen::Ideas => crate::ui::ideas::handle_key(self, key),
-            Screen::Pomodoro => crate::ui::pomodoro::handle_key(self, key),
-            Screen::Stats => crate::ui::stats::handle_key(self, key),
-            _ => {}
-        }
+        self.dispatch_module(self.screen, key);
     }
 
     fn reset_habits_day_if_leaving(&mut self) {

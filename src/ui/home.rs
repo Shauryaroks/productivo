@@ -22,13 +22,17 @@ pub fn render(f: &mut Frame, app: &mut App) {
             Constraint::Percentage(34),
         ])
         .split(rows[0]);
+        // Rail-top fits its content (habit count) instead of claiming half the rail.
+        let rail_top = (app.habits.items.len() as u16 + 2).clamp(5, rows[0].height / 3);
         let rail = Layout::vertical([
-            Constraint::Fill(1),
+            Constraint::Length(rail_top),
             Constraint::Length(4),
             Constraint::Fill(1),
         ])
         .split(cols[0]);
-        let right = Layout::vertical([Constraint::Length(10), Constraint::Fill(1)]).split(cols[2]);
+        // Right-top sized for the month grid WITH event-dot rows (calendar
+        // renders dots whenever it gets this much height).
+        let right = Layout::vertical([Constraint::Length(16), Constraint::Fill(1)]).split(cols[2]);
         vec![rail[0], rail[1], rail[2], cols[1], right[0], right[1]]
     } else {
         let cols = Layout::horizontal([Constraint::Percentage(42), Constraint::Percentage(58)])
@@ -46,11 +50,24 @@ pub fn render(f: &mut Frame, app: &mut App) {
     let hint = app
         .status
         .clone()
-        .unwrap_or_else(|| " tab focus · enter zoom · 1-6 jump · q quit ".into());
+        .or_else(|| crate::ui::habits::input_hint(app))
+        .or_else(|| crate::ui::todos::input_hint(app))
+        .or_else(|| crate::ui::ideas::input_hint(app))
+        .unwrap_or_else(|| {
+            " tab focus · keys act on focused panel · enter zoom · 1-6 jump · q quit ".into()
+        });
     f.render_widget(
         Paragraph::new(Line::from(hint)).style(app.theme.hint()),
         rows[1],
     );
+
+    // Panels are editable from Home: forms opened here render as popups over the grid.
+    if app.todos.form.is_some() {
+        crate::ui::todos::render_form(f, app, area);
+    }
+    if app.calendar.form.is_some() {
+        crate::ui::calendar::render_event_form(f, app, area);
+    }
 }
 
 fn render_panel(f: &mut Frame, app: &mut App, panel: &str, area: Rect, focused: bool) {

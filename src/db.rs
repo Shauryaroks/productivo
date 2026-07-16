@@ -264,6 +264,16 @@ pub fn todos_open(conn: &Connection) -> rusqlite::Result<Vec<Todo>> {
     rows.collect()
 }
 
+pub fn todos_done_on(conn: &Connection, date: NaiveDate) -> rusqlite::Result<Vec<Todo>> {
+    let mut stmt = conn.prepare(&format!(
+        "SELECT {TODO_COLS} FROM todos
+         WHERE done_at IS NOT NULL AND date(done_at, 'localtime') = ?1
+         ORDER BY done_at DESC"
+    ))?;
+    let rows = stmt.query_map([date.to_string()], row_to_todo)?;
+    rows.collect()
+}
+
 pub fn subtasks_of(conn: &Connection, parent_id: i64) -> rusqlite::Result<Vec<Todo>> {
     let mut stmt = conn.prepare(&format!(
         "SELECT {TODO_COLS} FROM todos WHERE parent_id = ?1 ORDER BY done_at IS NOT NULL, created_at"

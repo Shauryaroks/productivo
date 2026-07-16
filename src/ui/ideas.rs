@@ -141,23 +141,48 @@ fn idea_lines(app: &App) -> Vec<ListItem<'static>> {
         .collect()
 }
 
+/// Text-entry hint for the bottom bar — shown on both the zoomed screen and Home.
+pub fn input_hint(app: &App) -> Option<String> {
+    if let Some(buf) = &app.ideas.input {
+        return Some(format!(" new idea: {buf}▏  (enter save · esc cancel)"));
+    }
+    app.ideas
+        .body_edit
+        .as_ref()
+        .map(|buf| format!(" body: {buf}▏  (enter save · esc cancel)"))
+}
+
 pub fn render_panel(f: &mut Frame, app: &mut App, area: Rect, focused: bool) {
     let title = format!("IDEAS ({})", app.ideas.items.len());
     let block = app.theme.panel_block(&title, focused);
     let t = app.theme;
+    // Date only when the panel is wide enough for title + date to fit cleanly.
+    let show_date = area.width >= 44;
+    let take = area.height.saturating_sub(2) as usize;
     let lines: Vec<Line> = app
         .ideas
         .items
         .iter()
-        .take(5)
-        .map(|idea| {
+        .take(take.max(1))
+        .enumerate()
+        .map(|(i, idea)| {
             let (mark, mark_color) = badge(&t, &idea.status);
-            let date = idea.created_at.get(0..10).unwrap_or(&idea.created_at);
-            Line::from(vec![
+            let mut title_style = Style::default().fg(t.text);
+            if focused && i == app.ideas.selected {
+                title_style = title_style.add_modifier(Modifier::REVERSED);
+            }
+            let mut spans = vec![
                 Span::styled(format!(" {mark} "), Style::default().fg(mark_color)),
-                Span::styled(idea.title.clone(), Style::default().fg(t.text)),
-                Span::styled(format!("  {date}"), Style::default().fg(t.muted)),
-            ])
+                Span::styled(idea.title.clone(), title_style),
+            ];
+            if show_date {
+                let date = idea.created_at.get(0..10).unwrap_or(&idea.created_at);
+                spans.push(Span::styled(
+                    format!("  {date}"),
+                    Style::default().fg(t.muted),
+                ));
+            }
+            Line::from(spans)
         })
         .collect();
     f.render_widget(Paragraph::new(lines).block(block), area);
@@ -188,14 +213,12 @@ pub fn render_zoomed(f: &mut Frame, app: &mut App) {
         cols[1],
     );
 
-    let hint = app.status.clone().unwrap_or_else(|| {
-        if let Some(buf) = &app.ideas.input {
-            format!(" new idea: {buf}▏  (enter save · esc cancel)")
-        } else if let Some(buf) = &app.ideas.body_edit {
-            format!(" body: {buf}▏  (enter save · esc cancel)")
-        } else {
+    let hint = app
+        .status
+        .clone()
+        .or_else(|| input_hint(app))
+        .unwrap_or_else(|| {
             " a capture · enter edit body · s cycle status · d delete · esc home ".into()
-        }
-    });
+        });
     f.render_widget(Paragraph::new(hint).style(app.theme.hint()), rows[1]);
 }

@@ -144,10 +144,23 @@ fn habit_lines(app: &App, show_streak: bool) -> Vec<ListItem<'static>> {
         .collect()
 }
 
+/// Text-entry hint for the bottom bar — shown on both the zoomed screen and
+/// Home (panels are directly editable from Home).
+pub fn input_hint(app: &App) -> Option<String> {
+    app.habits
+        .input
+        .as_ref()
+        .map(|buf| format!(" new habit: {buf}▏  (enter save · esc cancel)"))
+}
+
 pub fn render_panel(f: &mut Frame, app: &mut App, area: Rect, focused: bool) {
     let done = app.habits.checked.len();
     let total = app.habits.items.len();
-    let title = format!("HABITS {done}/{total}");
+    let title = if app.habits.day.is_some() {
+        format!("HABITS {done}/{total} · yday")
+    } else {
+        format!("HABITS {done}/{total}")
+    };
     let block = app.theme.panel_block(&title, focused);
     f.render_widget(List::new(habit_lines(app, false)).block(block), area);
 }
@@ -164,12 +177,12 @@ pub fn render_zoomed(f: &mut Frame, app: &mut App) {
         .panel_block(&format!("HABITS — {day_label}"), true);
     f.render_widget(List::new(habit_lines(app, true)).block(block), rows[0]);
 
-    let hint = app.status.clone().unwrap_or_else(|| {
-        if let Some(buf) = &app.habits.input {
-            format!(" new habit: {buf}▏  (enter save · esc cancel)")
-        } else {
+    let hint = app
+        .status
+        .clone()
+        .or_else(|| input_hint(app))
+        .unwrap_or_else(|| {
             " space check · a add · d archive · J/K reorder · y yesterday · esc home ".into()
-        }
-    });
+        });
     f.render_widget(Paragraph::new(hint).style(app.theme.hint()), rows[1]);
 }

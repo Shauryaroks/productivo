@@ -381,9 +381,11 @@ fn todo_line(app: &App, row: &Row, selected: bool) -> ListItem<'static> {
 }
 
 pub fn render_panel(f: &mut Frame, app: &mut App, area: Rect, focused: bool) {
-    let block = app
-        .theme
-        .panel_block(&format!("TODOS ({})", app.todos.items.len()), focused);
+    let t = app.theme;
+    let block = t.panel_block(&format!("TODOS ({})", app.todos.items.len()), focused);
+    let inner = block.inner(area);
+    f.render_widget(block, area);
+
     let items: Vec<ListItem> = app
         .todos
         .items
@@ -391,7 +393,45 @@ pub fn render_panel(f: &mut Frame, app: &mut App, area: Rect, focused: bool) {
         .enumerate()
         .map(|(i, r)| todo_line(app, r, focused && i == app.todos.selected))
         .collect();
-    f.render_widget(List::new(items).block(block), area);
+    let open_h = (items.len() as u16).min(inner.height);
+    f.render_widget(
+        List::new(items),
+        Rect {
+            height: open_h,
+            ..inner
+        },
+    );
+
+    // Fill leftover hero space with today's completions instead of blank rows.
+    let remaining = inner.height.saturating_sub(open_h + 1);
+    if remaining >= 2 {
+        let done = db::todos_done_on(&app.conn, app.today).unwrap_or_default();
+        if !done.is_empty() {
+            let mut lines = vec![Line::from(Span::styled(
+                format!(" ── done today ({}) ──", done.len()),
+                Style::default().fg(t.muted),
+            ))];
+            for td in done.iter().take(remaining as usize - 1) {
+                lines.push(Line::from(vec![
+                    Span::styled(" ✔ ", Style::default().fg(t.green)),
+                    Span::styled(
+                        td.title.clone(),
+                        Style::default()
+                            .fg(t.muted)
+                            .add_modifier(Modifier::CROSSED_OUT),
+                    ),
+                ]));
+            }
+            f.render_widget(
+                Paragraph::new(lines),
+                Rect {
+                    y: inner.y + open_h + 1,
+                    height: remaining,
+                    ..inner
+                },
+            );
+        }
+    }
 }
 
 pub fn render_zoomed(f: &mut Frame, app: &mut App) {
@@ -415,12 +455,8 @@ pub fn render_zoomed(f: &mut Frame, app: &mut App) {
         .collect();
     f.render_widget(List::new(items).block(block), rows[0]);
 
-    let hint = app.status.clone().unwrap_or_else(|| {
-        if app.todos.filter_editing {
-            format!(" filter: {}▏  (enter apply · esc clear)", app.todos.filter.as_deref().unwrap_or(""))
-        } else {
-            " a add · A subtask · e edit · space done · u undo · d delete · enter expand · / filter · g group · p pomodoro · esc home ".into()
-        }
+    let hint = app.status.clone().or_else(|| input_hint(app)).unwrap_or_else(|| {
+        " a add · A subtask · e edit · space done · u undo · d delete · enter expand · / filter · g group · p pomodoro · esc home ".into()
     });
     f.render_widget(Paragraph::new(hint).style(app.theme.hint()), rows[1]);
 
@@ -429,7 +465,18 @@ pub fn render_zoomed(f: &mut Frame, app: &mut App) {
     }
 }
 
-fn render_form(f: &mut Frame, app: &mut App, screen: Rect) {
+/// Text-entry hint for the bottom bar — shown on both the zoomed screen and Home.
+pub fn input_hint(app: &App) -> Option<String> {
+    if app.todos.filter_editing {
+        return Some(format!(
+            " filter: {}▏  (enter apply · esc clear)",
+            app.todos.filter.as_deref().unwrap_or("")
+        ));
+    }
+    None
+}
+
+pub fn render_form(f: &mut Frame, app: &mut App, screen: Rect) {
     let form = app.todos.form.as_ref().unwrap();
     let t = app.theme;
     let w = 60.min(screen.width.saturating_sub(4));
