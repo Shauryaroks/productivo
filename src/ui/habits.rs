@@ -3,7 +3,7 @@ use crossterm::event::{KeyCode, KeyEvent};
 use ratatui::layout::{Constraint, Layout, Rect};
 use ratatui::style::{Modifier, Style};
 use ratatui::text::{Line, Span};
-use ratatui::widgets::{List, ListItem, Paragraph};
+use ratatui::widgets::{List, ListItem, ListState, Paragraph};
 use ratatui::Frame;
 
 use crate::app::{App, InputMode};
@@ -162,7 +162,14 @@ pub fn render_panel(f: &mut Frame, app: &mut App, area: Rect, focused: bool) {
         format!("HABITS {done}/{total}")
     };
     let block = app.theme.panel_block(&title, focused);
-    f.render_widget(List::new(habit_lines(app, false)).block(block), area);
+    // Stateful render scrolls the list to keep the selection visible on overflow.
+    let mut st = ListState::default();
+    st.select(Some(app.habits.selected));
+    f.render_stateful_widget(
+        List::new(habit_lines(app, false)).block(block),
+        area,
+        &mut st,
+    );
 }
 
 pub fn render_zoomed(f: &mut Frame, app: &mut App) {
@@ -175,7 +182,13 @@ pub fn render_zoomed(f: &mut Frame, app: &mut App) {
     let block = app
         .theme
         .panel_block(&format!("HABITS — {day_label}"), true);
-    f.render_widget(List::new(habit_lines(app, true)).block(block), rows[0]);
+    let mut st = ListState::default();
+    st.select(Some(app.habits.selected));
+    f.render_stateful_widget(
+        List::new(habit_lines(app, true)).block(block),
+        rows[0],
+        &mut st,
+    );
 
     let hint = app
         .status

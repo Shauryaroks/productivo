@@ -1,4 +1,5 @@
 pub mod calendar;
+pub mod donut;
 pub mod habits;
 pub mod home;
 pub mod ideas;

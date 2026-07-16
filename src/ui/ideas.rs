@@ -2,7 +2,7 @@ use crossterm::event::{KeyCode, KeyEvent};
 use ratatui::layout::{Constraint, Layout, Rect};
 use ratatui::style::{Modifier, Style};
 use ratatui::text::{Line, Span};
-use ratatui::widgets::{List, ListItem, Paragraph, Wrap};
+use ratatui::widgets::{List, ListItem, ListState, Paragraph, Wrap};
 use ratatui::Frame;
 
 use crate::app::{App, InputMode};
@@ -159,8 +159,15 @@ pub fn render_panel(f: &mut Frame, app: &mut App, area: Rect, focused: bool) {
     // Date only when the panel is wide enough for title + date to fit cleanly.
     let show_date = area.width >= 44;
     let max_lines = (area.height.saturating_sub(2) as usize).max(1);
+    // Scroll window: each idea takes up to 2 lines; keep the selection visible.
+    let visible = (max_lines / 2).max(1);
+    let start = if focused {
+        app.ideas.selected.saturating_sub(visible.saturating_sub(1))
+    } else {
+        0
+    };
     let mut lines: Vec<Line> = Vec::new();
-    for (i, idea) in app.ideas.items.iter().enumerate() {
+    for (i, idea) in app.ideas.items.iter().enumerate().skip(start) {
         if lines.len() >= max_lines {
             break;
         }
@@ -207,7 +214,9 @@ pub fn render_zoomed(f: &mut Frame, app: &mut App) {
 
     let title = format!("IDEAS ({})", app.ideas.items.len());
     let block = app.theme.panel_block(&title, true);
-    f.render_widget(List::new(idea_lines(app)).block(block), cols[0]);
+    let mut st = ListState::default();
+    st.select(Some(app.ideas.selected));
+    f.render_stateful_widget(List::new(idea_lines(app)).block(block), cols[0], &mut st);
 
     let body_text = app
         .ideas

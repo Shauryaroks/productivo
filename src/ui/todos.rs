@@ -3,7 +3,7 @@ use crossterm::event::{KeyCode, KeyEvent};
 use ratatui::layout::{Constraint, Layout, Rect};
 use ratatui::style::{Modifier, Style};
 use ratatui::text::{Line, Span};
-use ratatui::widgets::{Clear, List, ListItem, Paragraph};
+use ratatui::widgets::{Clear, List, ListItem, ListState, Paragraph};
 use ratatui::Frame;
 
 use crate::app::{App, InputMode};
@@ -394,12 +394,16 @@ pub fn render_panel(f: &mut Frame, app: &mut App, area: Rect, focused: bool) {
         .map(|(i, r)| todo_line(app, r, focused && i == app.todos.selected))
         .collect();
     let open_h = (items.len() as u16).min(inner.height);
-    f.render_widget(
+    // Stateful render scrolls to keep the selection visible on overflow.
+    let mut st = ListState::default();
+    st.select(Some(app.todos.selected));
+    f.render_stateful_widget(
         List::new(items),
         Rect {
             height: open_h,
             ..inner
         },
+        &mut st,
     );
 
     // Fill leftover hero space with today's completions instead of blank rows.
@@ -453,7 +457,9 @@ pub fn render_zoomed(f: &mut Frame, app: &mut App) {
         .enumerate()
         .map(|(i, r)| todo_line(app, r, i == app.todos.selected))
         .collect();
-    f.render_widget(List::new(items).block(block), rows[0]);
+    let mut st = ListState::default();
+    st.select(Some(app.todos.selected));
+    f.render_stateful_widget(List::new(items).block(block), rows[0], &mut st);
 
     let hint = app.status.clone().or_else(|| input_hint(app)).unwrap_or_else(|| {
         " a add · A subtask · e edit · space done · u undo · d delete · enter expand · / filter · g group · p pomodoro · esc home ".into()

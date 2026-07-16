@@ -15,6 +15,7 @@ pub fn render(f: &mut Frame, app: &mut App) {
     let area = f.area();
     let rows = Layout::vertical([Constraint::Min(0), Constraint::Length(1)]).split(area);
 
+    let mut donut_area: Option<Rect> = None;
     let slots: Vec<Rect> = if rows[0].width >= 110 {
         let cols = Layout::horizontal([
             Constraint::Percentage(24),
@@ -30,10 +31,13 @@ pub fn render(f: &mut Frame, app: &mut App) {
             Constraint::Fill(1),
         ])
         .split(cols[0]);
+        // Center: todos hero with the ambient donut spinning beneath it.
+        let center = Layout::vertical([Constraint::Fill(1), Constraint::Length(10)]).split(cols[1]);
+        donut_area = Some(center[1]);
         // Right-top sized for the month grid WITH event-dot rows (calendar
         // renders dots whenever it gets this much height).
         let right = Layout::vertical([Constraint::Length(16), Constraint::Fill(1)]).split(cols[2]);
-        vec![rail[0], rail[1], rail[2], cols[1], right[0], right[1]]
+        vec![rail[0], rail[1], rail[2], center[0], right[0], right[1]]
     } else {
         let cols = Layout::horizontal([Constraint::Percentage(42), Constraint::Percentage(58)])
             .split(rows[0]);
@@ -45,6 +49,10 @@ pub fn render(f: &mut Frame, app: &mut App) {
     for (i, panel) in app.config.panels.clone().iter().enumerate() {
         let Some(&slot) = slots.get(i) else { break };
         render_panel(f, app, panel, slot, i == app.focus);
+    }
+
+    if let Some(da) = donut_area {
+        crate::ui::donut::render(f, app, da);
     }
 
     let hint = app

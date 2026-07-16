@@ -33,7 +33,8 @@ fn run(
 ) -> Result<(), Box<dyn std::error::Error>> {
     while !app.should_quit {
         terminal.draw(|f| ui::render(f, app))?;
-        if event::poll(Duration::from_millis(250))? {
+        // 100ms tick: smooth enough for the donut animation, still negligible CPU.
+        if event::poll(Duration::from_millis(100))? {
             if let Event::Key(key) = event::read()? {
                 if key.kind == KeyEventKind::Press {
                     app.handle_key(key);

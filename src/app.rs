@@ -31,6 +31,7 @@ pub struct App {
     pub focus: usize, // focused panel index on Home (into config.panels)
     pub should_quit: bool,
     pub today: NaiveDate,
+    pub frame: usize, // event-loop tick counter, drives ambient animations
     pub status: Option<String>,
     pub habits: crate::ui::habits::HabitsState,
     pub todos: crate::ui::todos::TodosState,
@@ -63,6 +64,7 @@ impl App {
             focus: 0,
             should_quit: false,
             today: Local::now().date_naive(),
+            frame: 0,
             status,
             habits: crate::ui::habits::HabitsState::default(),
             todos: crate::ui::todos::TodosState::default(),
@@ -180,6 +182,7 @@ impl App {
     }
 
     pub fn tick(&mut self) {
+        self.frame = self.frame.wrapping_add(1);
         crate::ui::pomodoro::on_tick(self);
 
         let now = Local::now().date_naive();
