@@ -373,20 +373,40 @@ pub fn render_floating(f: &mut Frame, app: &mut App) {
 }
 
 pub fn render_panel(f: &mut Frame, app: &mut App, area: Rect, focused: bool) {
-    let mut line = if let Some(active) = &app.pomodoro.active {
-        let (mm, ss) = mmss(active.remaining(Utc::now()));
-        let kind_str = active.kind.as_str();
+    let now = Utc::now();
+    let remaining = match &app.pomodoro.active {
+        Some(active) => active.remaining(now),
+        None => Duration::minutes(app.config.pomodoro.focus_min as i64),
+    };
+    let (mm, ss) = mmss(remaining);
+    let mut status = if let Some(active) = &app.pomodoro.active {
         match &active.todo_title {
-            Some(title) => format!("▶ {mm:02}:{ss:02} {kind_str} · {title}"),
-            None => format!("▶ {mm:02}:{ss:02} {kind_str}"),
+            Some(title) => format!("{} · {title}", active.kind.as_str()),
+            None => active.kind.as_str().to_string(),
         }
     } else {
         format!("{} done today · s to start", app.pomodoro.today_count)
     };
     if app.pomodoro.suggest_break && app.pomodoro.active.is_none() {
-        line.push_str("  ·  break time?");
+        status.push_str("  ·  break time?");
     }
+
     let block = app.theme.panel_block("POMODORO", focused);
+    let inner = block.inner(area);
+    // Big block digits when the panel is tall enough (Home gives it 8 rows);
+    // the one-line summary stays as the fallback for cramped layouts.
+    if inner.height >= 6 && inner.width >= 17 {
+        let mut lines = big_clock_lines(&format!("{mm:02}:{ss:02}"), active_color(app));
+        lines.push(Line::styled(status, Style::default().fg(app.theme.text)));
+        f.render_widget(Paragraph::new(lines).block(block), area);
+        return;
+    }
+
+    let line = if app.pomodoro.active.is_some() {
+        format!("▶ {mm:02}:{ss:02} {status}")
+    } else {
+        status
+    };
     f.render_widget(
         Paragraph::new(Line::from(line))
             .style(Style::default().fg(app.theme.text))

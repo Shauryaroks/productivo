@@ -16,6 +16,7 @@ pub fn render(f: &mut Frame, app: &mut App) {
     let rows = Layout::vertical([Constraint::Min(0), Constraint::Length(1)]).split(area);
 
     let mut ambient_area: Option<Rect> = None;
+    let subs_area: Rect;
     let slots: Vec<Rect> = if rows[0].width >= 110 {
         let cols = Layout::horizontal([
             Constraint::Percentage(24),
@@ -25,24 +26,50 @@ pub fn render(f: &mut Frame, app: &mut App) {
         .split(rows[0]);
         // Rail-top fits its content (habit count) instead of claiming half the rail.
         let rail_top = (app.habits.items.len() as u16 + 2).clamp(5, rows[0].height / 3);
+        // Rail middle gets 8 rows so the pomodoro panel fits its big clock.
         let rail = Layout::vertical([
             Constraint::Length(rail_top),
-            Constraint::Length(4),
+            Constraint::Length(8),
             Constraint::Fill(1),
         ])
         .split(cols[0]);
-        // Center: ambient aurora strip on top, todos hero below it.
-        let center = Layout::vertical([Constraint::Length(8), Constraint::Fill(1)]).split(cols[1]);
+        // Center: ambient aurora strip on top, then todos and subs split equally.
+        let center = Layout::vertical([
+            Constraint::Length(8),
+            Constraint::Fill(1),
+            Constraint::Fill(1),
+        ])
+        .split(cols[1]);
         ambient_area = Some(center[0]);
+        subs_area = center[2];
         // Right-top sized for the month grid WITH event-dot rows (calendar
         // renders dots whenever it gets this much height).
         let right = Layout::vertical([Constraint::Length(16), Constraint::Fill(1)]).split(cols[2]);
         vec![rail[0], rail[1], rail[2], center[1], right[0], right[1]]
     } else {
+        // Narrow fallback: grid on top, subs strip full-width along the bottom,
+        // as tall as one grid cell (grid is 3 rows of cells → strip gets 1/4).
+        let split =
+            Layout::vertical([Constraint::Fill(3), Constraint::Fill(1)]).split(rows[0]);
+        subs_area = split[1];
         let cols = Layout::horizontal([Constraint::Percentage(42), Constraint::Percentage(58)])
-            .split(rows[0]);
-        let left = Layout::vertical([Constraint::Ratio(1, 3); 3]).split(cols[0]);
-        let right = Layout::vertical([Constraint::Ratio(1, 3); 3]).split(cols[1]);
+            .split(split[0]);
+        // ponytail: middle-left is pomodoro with the default panel order — give
+        // it the 8 rows its big clock needs; revisit if panels get reordered.
+        let left = Layout::vertical([
+            Constraint::Fill(1),
+            Constraint::Length(8),
+            Constraint::Fill(1),
+        ])
+        .split(cols[0]);
+        // ponytail: middle-right is calendar with the default panel order — 9
+        // rows fits a full compact month; revisit if panels get reordered.
+        let right = Layout::vertical([
+            Constraint::Fill(1),
+            Constraint::Length(9),
+            Constraint::Fill(1),
+        ])
+        .split(cols[1]);
         left.iter().chain(right.iter()).copied().collect()
     };
 
@@ -50,6 +77,7 @@ pub fn render(f: &mut Frame, app: &mut App) {
         let Some(&slot) = slots.get(i) else { break };
         render_panel(f, app, panel, slot, i == app.focus);
     }
+    crate::ui::subs::render_panel(f, app, subs_area, app.focus == app.config.panels.len());
 
     if let Some(aa) = ambient_area {
         crate::ui::ambient::render(f, app, aa);
@@ -61,9 +89,8 @@ pub fn render(f: &mut Frame, app: &mut App) {
         .or_else(|| crate::ui::habits::input_hint(app))
         .or_else(|| crate::ui::todos::input_hint(app))
         .or_else(|| crate::ui::ideas::input_hint(app))
-        .unwrap_or_else(|| {
-            " tab focus · keys act on focused panel · enter zoom · 1-6 jump · q quit ".into()
-        });
+        .or_else(|| crate::ui::subs::input_hint(app))
+        .unwrap_or_else(|| panel_hint(app));
     f.render_widget(
         Paragraph::new(Line::from(hint)).style(app.theme.hint()),
         rows[1],
@@ -76,6 +103,26 @@ pub fn render(f: &mut Frame, app: &mut App) {
     if app.calendar.form.is_some() {
         crate::ui::calendar::render_event_form(f, app, area);
     }
+}
+
+/// Bottom-bar hint for the focused panel's own keys (the generic navigation
+/// tail stays constant). Keys mirror each module's zoomed-screen hint.
+fn panel_hint(app: &App) -> String {
+    use crate::app::Screen;
+    let keys = match app.active_module() {
+        Screen::Habits => " space check · a add · d archive · J/K reorder · y yesterday".into(),
+        Screen::Todos => " a add · e edit · space done · u undo · d delete · / filter · p pomodoro".into(),
+        Screen::Calendar => " ←↓↑→ move · [/] month · t today · a add event · d delete".into(),
+        Screen::Ideas => " a capture · s cycle status · d delete".into(),
+        Screen::Pomodoro => format!(
+            " s start · space pause · x abandon · +/- focus {}m · [/] break {}m",
+            app.config.pomodoro.focus_min, app.config.pomodoro.break_min
+        ),
+        Screen::Stats => " r range".into(),
+        Screen::Subs => " a add sub · t add tool · d delete".into(),
+        Screen::Home => String::new(),
+    };
+    format!("{keys} · tab next · enter zoom · q quit ")
 }
 
 fn render_panel(f: &mut Frame, app: &mut App, panel: &str, area: Rect, focused: bool) {

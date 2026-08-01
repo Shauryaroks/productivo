@@ -43,6 +43,16 @@ pub struct Event {
 }
 
 #[derive(Debug, Clone)]
+pub struct Sub {
+    pub id: i64,
+    pub name: String,
+    pub kind: String, // sub|tool
+    pub price: Option<f64>,
+    pub cycle: String, // monthly|yearly
+    pub renew_day: Option<u32>,
+}
+
+#[derive(Debug, Clone)]
 pub struct Idea {
     pub id: i64,
     pub title: String,

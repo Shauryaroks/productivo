@@ -3,7 +3,7 @@ use crossterm::event::{KeyCode, KeyEvent};
 use ratatui::layout::{Constraint, Layout, Rect};
 use ratatui::style::{Color, Style};
 use ratatui::text::{Line, Span};
-use ratatui::widgets::{BarChart, Paragraph, Sparkline};
+use ratatui::widgets::{Paragraph, Sparkline};
 use ratatui::Frame;
 
 use crate::app::App;
@@ -120,26 +120,16 @@ pub fn render_panel(f: &mut Frame, app: &mut App, area: Rect, focused: bool) {
     let focus_line = format!("focus {} today", fmt_hm(focus_today));
 
     let t = app.theme;
+
+    // Tall panel (bento right-bottom): the productivity pet lives here.
+    if area.height >= 18 {
+        crate::ui::pet::render(f, app, area, focused);
+        return;
+    }
+
     let block = t.panel_block("STATS", focused);
     let inner = block.inner(area);
     f.render_widget(block, area);
-
-    // Tall panel (bento right-bottom): show the real visualizations instead of
-    // three summary lines — heatmap and focus bars scale to the space.
-    if inner.height >= 16 {
-        let parts =
-            Layout::vertical([Constraint::Percentage(50), Constraint::Percentage(50)]).split(inner);
-        // ponytail: a Week-range heatmap is 2 lonely columns on a wide home
-        // panel — render the home heatmap at Month minimum, restore after.
-        let saved = app.stats.range;
-        if saved == Range::Week {
-            app.stats.range = Range::Month;
-        }
-        render_heatmap(f, app, parts[0]);
-        app.stats.range = saved;
-        render_focus(f, app, parts[1]);
-        return;
-    }
 
     let lines = vec![
         Line::styled(streak_line, Style::default().fg(t.peach)),
@@ -162,93 +152,16 @@ pub fn render_zoomed(f: &mut Frame, app: &mut App) {
         Layout::vertical([Constraint::Percentage(50), Constraint::Percentage(50)]).split(inner);
     let top = Layout::horizontal([Constraint::Percentage(50), Constraint::Percentage(50)])
         .split(grid_rows[0]);
-    let bottom = Layout::horizontal([Constraint::Percentage(50), Constraint::Percentage(50)])
-        .split(grid_rows[1]);
 
-    render_heatmap(f, app, top[0]);
+    crate::ui::pet::render(f, app, top[0], false);
     render_velocity(f, app, top[1]);
-    render_focus(f, app, bottom[0]);
-    render_week_review(f, app, bottom[1]);
+    render_week_review(f, app, grid_rows[1]);
 
     let hint = app
         .status
         .clone()
         .unwrap_or_else(|| " r range · esc home ".into());
     f.render_widget(Paragraph::new(hint).style(app.theme.hint()), rows[1]);
-}
-
-fn render_heatmap(f: &mut Frame, app: &mut App, area: Rect) {
-    let t = app.theme;
-    let block = t.panel_block("HABIT HEATMAP", false);
-    let inner = block.inner(area);
-    f.render_widget(block, area);
-    if inner.width == 0 || inner.height == 0 {
-        return;
-    }
-
-    let today = app.today;
-    let habits = db::habits_list(&app.conn).unwrap_or_default();
-    let habit_count = habits.len() as u32;
-    let since = since_for(app.stats.range, today);
-    let day_counts = db::stat_habit_days(&app.conn, since).unwrap_or_default();
-    let lookup = |d: NaiveDate| {
-        day_counts
-            .iter()
-            .find(|(dt, _)| *dt == d)
-            .map(|(_, n)| *n)
-            .unwrap_or(0)
-    };
-
-    let this_monday = today - Duration::days(today.weekday().num_days_from_monday() as i64);
-    let earliest_monday = since - Duration::days(since.weekday().num_days_from_monday() as i64);
-    let mut total_weeks = ((this_monday - earliest_monday).num_days() / 7 + 1).max(1) as usize;
-    if app.stats.range == Range::Year {
-        total_weeks = total_weeks.min(52);
-    }
-    // each cell renders as "■ " — 2 columns wide.
-    let max_cols = ((inner.width / 2).max(1)) as usize;
-    let weeks_shown = total_weeks.min(max_cols).max(1);
-    let start_monday = this_monday - Duration::days(7 * (weeks_shown as i64 - 1));
-
-    let mut lines: Vec<Line> = Vec::with_capacity(7 + habits.len());
-    for row in 0..7i64 {
-        let mut spans = Vec::with_capacity(weeks_shown);
-        for w in 0..weeks_shown {
-            let d = start_monday + Duration::days(7 * w as i64 + row);
-            let color = if d > today || habit_count == 0 {
-                t.heat[0]
-            } else {
-                let n = lookup(d);
-                let ratio = n as f32 / habit_count as f32;
-                let idx = if n == 0 {
-                    0
-                } else if ratio <= 1.0 / 3.0 {
-                    1
-                } else if ratio <= 2.0 / 3.0 {
-                    2
-                } else {
-                    3
-                };
-                t.heat[idx]
-            };
-            spans.push(Span::styled("■ ", Style::default().fg(color)));
-        }
-        lines.push(Line::from(spans));
-    }
-
-    for h in &habits {
-        let cur = db::habit_streak(&app.conn, h.id, today).unwrap_or(0);
-        let best = db::habit_best_streak(&app.conn, h.id).unwrap_or(0);
-        lines.push(Line::from(vec![
-            Span::styled(format!("{:<12}", h.name), Style::default().fg(t.text)),
-            Span::styled(
-                format!("⚡{cur} now · {best} best"),
-                Style::default().fg(t.peach),
-            ),
-        ]));
-    }
-
-    f.render_widget(Paragraph::new(lines), inner);
 }
 
 fn render_velocity(f: &mut Frame, app: &mut App, area: Rect) {
@@ -324,75 +237,6 @@ fn render_velocity(f: &mut Frame, app: &mut App, area: Rect) {
         )),
         rows[4],
     );
-}
-
-fn render_focus(f: &mut Frame, app: &mut App, area: Rect) {
-    let t = app.theme;
-    let block = t.panel_block("FOCUS", false);
-    let inner = block.inner(area);
-    f.render_widget(block, area);
-    if inner.width == 0 || inner.height == 0 {
-        return;
-    }
-
-    let today = app.today;
-    let since = since_for(app.stats.range, today);
-    let mins = db::stat_focus_minutes(&app.conn, since).unwrap_or_default();
-    let n = (((today - since).num_days() + 1).clamp(1, 14)) as i64;
-    let start = today - Duration::days(n - 1);
-    let bars: Vec<(String, u64)> = (0..n)
-        .map(|i| {
-            let d = start + Duration::days(i);
-            let m = mins
-                .iter()
-                .find(|(dt, _)| *dt == d)
-                .map(|(_, v)| *v)
-                .unwrap_or(0);
-            (d.day().to_string(), m as u64)
-        })
-        .collect();
-    let bar_data: Vec<(&str, u64)> = bars.iter().map(|(l, v)| (l.as_str(), *v)).collect();
-
-    let rows = Layout::vertical([
-        Constraint::Length((inner.height * 3 / 5).max(4)),
-        Constraint::Min(0),
-    ])
-    .split(inner);
-
-    let chart = BarChart::default()
-        .data(&bar_data)
-        .bar_width(3)
-        .bar_gap(1)
-        .bar_style(Style::default().fg(t.peach))
-        .value_style(Style::default().fg(t.surface).bg(t.peach))
-        .label_style(Style::default().fg(t.muted));
-    f.render_widget(chart, rows[0]);
-
-    let projects = db::stat_focus_by_project(&app.conn, since).unwrap_or_default();
-    let max_proj = projects.iter().map(|(_, m)| *m).max().unwrap_or(0);
-    let bar_budget = (rows[1].width as usize).saturating_sub(24).clamp(4, 20);
-    let mut plines: Vec<Line> = Vec::new();
-    for (name, m) in projects.iter().take(rows[1].height as usize) {
-        let bar_len = if max_proj == 0 {
-            0
-        } else {
-            (*m as usize * bar_budget) / max_proj as usize
-        };
-        let bar_len = if *m > 0 { bar_len.max(1) } else { 0 };
-        let bar = "█".repeat(bar_len);
-        plines.push(Line::from(vec![
-            Span::styled(format!("#{name} "), Style::default().fg(t.blue)),
-            Span::styled(bar, Style::default().fg(t.peach)),
-            Span::styled(format!(" {}", fmt_hm(*m)), Style::default().fg(t.text)),
-        ]));
-    }
-    if plines.is_empty() {
-        plines.push(Line::styled(
-            " no focus sessions yet",
-            Style::default().fg(t.muted),
-        ));
-    }
-    f.render_widget(Paragraph::new(plines), rows[1]);
 }
 
 fn render_week_review(f: &mut Frame, app: &mut App, area: Rect) {

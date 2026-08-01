@@ -14,6 +14,7 @@ pub enum Screen {
     Ideas,
     Pomodoro,
     Stats,
+    Subs,
 }
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
@@ -39,6 +40,7 @@ pub struct App {
     pub ideas: crate::ui::ideas::IdeasState,
     pub pomodoro: crate::ui::pomodoro::PomodoroState,
     pub stats: crate::ui::stats::StatsState,
+    pub subs: crate::ui::subs::SubsState,
 }
 
 pub fn screen_for(panel: &str) -> Screen {
@@ -72,7 +74,9 @@ impl App {
             ideas: crate::ui::ideas::IdeasState::default(),
             pomodoro: crate::ui::pomodoro::PomodoroState::default(),
             stats: crate::ui::stats::StatsState::default(),
+            subs: crate::ui::subs::SubsState::default(),
         };
+        s.subs.load(&s.conn);
         s.habits.load(&s.conn, s.today);
         s.todos.load(&s.conn);
         s.calendar.load(&s.conn);
@@ -86,6 +90,10 @@ impl App {
     /// Panels are fully interactive from Home — zooming is optional.
     pub fn active_module(&self) -> Screen {
         if self.screen == Screen::Home {
+            // The subs strip sits below todos as a virtual 7th focus slot.
+            if self.focus >= self.config.panels.len() {
+                return Screen::Subs;
+            }
             screen_for(
                 self.config
                     .panels
@@ -106,6 +114,7 @@ impl App {
             Screen::Ideas => crate::ui::ideas::handle_key(self, key),
             Screen::Pomodoro => crate::ui::pomodoro::handle_key(self, key),
             Screen::Stats => crate::ui::stats::handle_key(self, key),
+            Screen::Subs => crate::ui::subs::handle_key(self, key),
             Screen::Home => {}
         }
     }
@@ -147,20 +156,26 @@ impl App {
                 }
                 return;
             }
+            KeyCode::Char('7') => {
+                self.reset_habits_day_if_leaving();
+                self.screen = Screen::Subs;
+                return;
+            }
             _ => {}
         }
 
         if self.screen == Screen::Home {
             match key.code {
                 KeyCode::Tab => {
-                    self.focus = (self.focus + 1) % self.config.panels.len();
+                    // +1: the subs strip is the extra slot after the config panels.
+                    self.focus = (self.focus + 1) % (self.config.panels.len() + 1);
                 }
                 KeyCode::BackTab => {
-                    let n = self.config.panels.len();
+                    let n = self.config.panels.len() + 1;
                     self.focus = (self.focus + n - 1) % n;
                 }
                 KeyCode::Enter => {
-                    self.screen = screen_for(&self.config.panels[self.focus].clone());
+                    self.screen = self.active_module();
                 }
                 // Everything else acts on the focused panel in place.
                 _ => {

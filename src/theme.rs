@@ -17,7 +17,8 @@ pub struct Theme {
     pub yellow: Color,
     pub blue: Color,
     pub peach: Color,
-    pub heat: [Color; 4], // habit heatmap intensity ramp, 0 → max
+    #[allow(dead_code)] // habit heatmap intensity ramp, 0 → max; heatmap parked for now
+    pub heat: [Color; 4],
 }
 
 impl Default for Theme {

@@ -157,14 +157,18 @@ fn month_grid_lines(app: &App, compact: bool, cell_w: usize) -> Vec<Line<'static
     let t = app.theme;
     let cur = app.calendar.cursor;
     let start = month_start(cur);
-    let header: String = ["Mo", "Tu", "We", "Th", "Fr", "Sa", "Su"]
+    let header_spans: Vec<Span> = ["Mo", "Tu", "We", "Th", "Fr", "Sa", "Su"]
         .iter()
-        .map(|d| format!("{d:^cell_w$}"))
+        .enumerate()
+        .map(|(i, d)| {
+            let color = if i >= 5 { t.peach } else { t.muted };
+            Span::styled(
+                format!("{d:^cell_w$}"),
+                Style::default().fg(color).add_modifier(Modifier::BOLD),
+            )
+        })
         .collect();
-    let mut lines = vec![Line::from(Span::styled(
-        header,
-        Style::default().fg(t.muted).add_modifier(Modifier::BOLD),
-    ))];
+    let mut lines = vec![Line::from(header_spans)];
     let lead = start.weekday().num_days_from_monday() as i64;
     let mut day = start - Duration::days(lead);
     let end = month_end(cur);
@@ -173,7 +177,14 @@ fn month_grid_lines(app: &App, compact: bool, cell_w: usize) -> Vec<Line<'static
         let mut dot_spans: Vec<Span> = Vec::new();
         for _ in 0..7 {
             let in_month = day.month() == cur.month();
-            let mut style = Style::default().fg(if in_month { t.text } else { t.muted });
+            let weekend = day.weekday().num_days_from_monday() >= 5;
+            let mut style = Style::default().fg(if !in_month {
+                t.muted
+            } else if weekend {
+                t.peach
+            } else {
+                t.text
+            });
             if day == app.today {
                 style = style.fg(t.accent).add_modifier(Modifier::BOLD);
             }
@@ -260,7 +271,8 @@ pub fn render_panel(f: &mut Frame, app: &mut App, area: Rect, focused: bool) {
     // Show event-dot rows whenever the slot is tall enough (13 lines covers a
     // 6-week month with dots); center the grid either way.
     let compact = inner.height < 13;
-    let cell_w = if inner.width >= 42 { 5 } else { 4 };
+    // Cell width from the panel width, so the grid stretches across the box.
+    let cell_w = (inner.width as usize / 7).clamp(3, 7);
     render_centered_grid(f, app, inner, compact, cell_w);
 }
 

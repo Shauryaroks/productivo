@@ -3,8 +3,10 @@ pub mod calendar;
 pub mod habits;
 pub mod home;
 pub mod ideas;
+pub mod pet;
 pub mod pomodoro;
 pub mod stats;
+pub mod subs;
 pub mod todos;
 
 use ratatui::Frame;
@@ -20,6 +22,7 @@ pub fn render(f: &mut Frame, app: &mut App) {
         Screen::Ideas => ideas::render_zoomed(f, app),
         Screen::Pomodoro => pomodoro::render_zoomed(f, app),
         Screen::Stats => stats::render_zoomed(f, app),
+        Screen::Subs => subs::render_zoomed(f, app),
     }
 
     // Active pomodoro floats on top of every screen except its own zoom

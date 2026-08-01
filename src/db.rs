@@ -98,6 +98,74 @@ pub fn migrate(conn: &Connection) -> rusqlite::Result<()> {
             COMMIT;",
         )?;
     }
+    if v < 2 {
+        conn.execute_batch(
+            "BEGIN;
+            CREATE TABLE subs (
+                id INTEGER PRIMARY KEY,
+                name TEXT NOT NULL,
+                kind TEXT NOT NULL DEFAULT 'sub',
+                price REAL,
+                renew_day INTEGER,
+                created_at TEXT NOT NULL DEFAULT (datetime('now'))
+            );
+            PRAGMA user_version = 2;
+            COMMIT;",
+        )?;
+    }
+    if v < 3 {
+        conn.execute_batch(
+            "BEGIN;
+            ALTER TABLE subs ADD COLUMN cycle TEXT NOT NULL DEFAULT 'monthly';
+            PRAGMA user_version = 3;
+            COMMIT;",
+        )?;
+    }
+    Ok(())
+}
+
+pub fn pomodoro_completed_total(conn: &Connection) -> rusqlite::Result<u32> {
+    conn.query_row(
+        "SELECT count(*) FROM pomodoros WHERE completed = 1 AND kind = 'focus'",
+        [],
+        |r| r.get(0),
+    )
+}
+
+pub fn subs_list(conn: &Connection) -> rusqlite::Result<Vec<crate::models::Sub>> {
+    // 'sub' sorts before 'tool', so subscriptions group on top.
+    let mut stmt = conn
+        .prepare("SELECT id, name, kind, price, cycle, renew_day FROM subs ORDER BY kind, name")?;
+    let rows = stmt.query_map([], |r| {
+        Ok(crate::models::Sub {
+            id: r.get(0)?,
+            name: r.get(1)?,
+            kind: r.get(2)?,
+            price: r.get(3)?,
+            cycle: r.get(4)?,
+            renew_day: r.get::<_, Option<i64>>(5)?.map(|d| d as u32),
+        })
+    })?;
+    rows.collect()
+}
+
+pub fn sub_add(
+    conn: &Connection,
+    name: &str,
+    kind: &str,
+    price: Option<f64>,
+    cycle: &str,
+    renew_day: Option<u32>,
+) -> rusqlite::Result<()> {
+    conn.execute(
+        "INSERT INTO subs (name, kind, price, cycle, renew_day) VALUES (?1, ?2, ?3, ?4, ?5)",
+        params![name, kind, price, cycle, renew_day.map(|d| d as i64)],
+    )?;
+    Ok(())
+}
+
+pub fn sub_delete(conn: &Connection, id: i64) -> rusqlite::Result<()> {
+    conn.execute("DELETE FROM subs WHERE id = ?1", params![id])?;
     Ok(())
 }
 
@@ -498,6 +566,7 @@ pub fn pomo_count_today(conn: &Connection, date: NaiveDate) -> rusqlite::Result<
     )
 }
 
+#[allow(dead_code)] // heatmap parked for now; still tested, keep for its return
 pub fn habit_best_streak(conn: &Connection, id: i64) -> rusqlite::Result<u32> {
     let mut stmt =
         conn.prepare("SELECT date FROM habit_log WHERE habit_id = ?1 ORDER BY date ASC")?;
@@ -579,6 +648,7 @@ pub fn stat_focus_minutes(
         .collect())
 }
 
+#[allow(dead_code)] // focus chart parked for now; still tested, keep for its return
 pub fn stat_focus_by_project(
     conn: &Connection,
     since: NaiveDate,
@@ -653,16 +723,20 @@ mod tests {
         let count: i64 = conn
             .query_row(
                 "SELECT count(*) FROM sqlite_master WHERE type='table' AND name IN
-                 ('todos','habits','habit_log','events','ideas','pomodoros')",
+                 ('todos','habits','habit_log','events','ideas','pomodoros','subs')",
                 [],
                 |r| r.get(0),
             )
             .unwrap();
-        assert_eq!(count, 6);
+        assert_eq!(count, 7);
         let v: i64 = conn
             .query_row("PRAGMA user_version", [], |r| r.get(0))
             .unwrap();
-        assert_eq!(v, 1);
+        assert_eq!(v, 3);
+        // cycle column exists (added by the v3 ALTER on both fresh and v2 DBs)
+        conn.query_row("SELECT cycle FROM subs LIMIT 1", [], |r| r.get::<_, String>(0))
+            .optional()
+            .unwrap();
     }
 
     #[test]
