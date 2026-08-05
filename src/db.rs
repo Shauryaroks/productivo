@@ -124,6 +124,15 @@ pub fn migrate(conn: &Connection) -> rusqlite::Result<()> {
     Ok(())
 }
 
+pub fn pomodoro_completed_since(conn: &Connection, since: NaiveDate) -> rusqlite::Result<u32> {
+    conn.query_row(
+        "SELECT count(*) FROM pomodoros
+         WHERE completed = 1 AND kind = 'focus' AND date(started_at) >= ?1",
+        params![since.to_string()],
+        |r| r.get(0),
+    )
+}
+
 pub fn pomodoro_completed_total(conn: &Connection) -> rusqlite::Result<u32> {
     conn.query_row(
         "SELECT count(*) FROM pomodoros WHERE completed = 1 AND kind = 'focus'",

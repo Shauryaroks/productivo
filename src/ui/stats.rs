@@ -49,8 +49,21 @@ pub struct StatsState {
 }
 
 pub fn handle_key(app: &mut App, key: KeyEvent) {
-    if key.code == KeyCode::Char('r') {
-        app.stats.range = app.stats.range.next();
+    match key.code {
+        KeyCode::Char('r') => app.stats.range = app.stats.range.next(),
+        // The pet lives in the stats slot, so its interactions land here.
+        KeyCode::Char('p') => {
+            app.pet.reaction = Some(crate::ui::pet::Reaction::Pet);
+            app.pet.reacted_at = app.frame;
+        }
+        KeyCode::Char('b') => {
+            app.pet.reaction = Some(crate::ui::pet::Reaction::Boop);
+            app.pet.reacted_at = app.frame;
+        }
+        KeyCode::Char('c') => {
+            app.pet.skin = (app.pet.skin + 1) % crate::ui::pet::SKIN_COUNT;
+        }
+        _ => {}
     }
 }
 
@@ -121,8 +134,10 @@ pub fn render_panel(f: &mut Frame, app: &mut App, area: Rect, focused: bool) {
 
     let t = app.theme;
 
-    // Tall panel (bento right-bottom): the productivity pet lives here.
-    if area.height >= 18 {
+    // Tall panel (bento right-bottom): the productivity pet lives here. The
+    // pet scales itself down, so even a font-zoomed terminal keeps the cat
+    // as long as the slot fits its minimum (12 rows).
+    if area.height >= 12 {
         crate::ui::pet::render(f, app, area, focused);
         return;
     }
@@ -160,7 +175,7 @@ pub fn render_zoomed(f: &mut Frame, app: &mut App) {
     let hint = app
         .status
         .clone()
-        .unwrap_or_else(|| " r range · esc home ".into());
+        .unwrap_or_else(|| " p pet · b boop · c skin · r range · esc home ".into());
     f.render_widget(Paragraph::new(hint).style(app.theme.hint()), rows[1]);
 }
 

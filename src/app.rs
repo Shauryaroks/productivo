@@ -41,6 +41,7 @@ pub struct App {
     pub pomodoro: crate::ui::pomodoro::PomodoroState,
     pub stats: crate::ui::stats::StatsState,
     pub subs: crate::ui::subs::SubsState,
+    pub pet: crate::ui::pet::PetState,
 }
 
 pub fn screen_for(panel: &str) -> Screen {
@@ -75,6 +76,7 @@ impl App {
             pomodoro: crate::ui::pomodoro::PomodoroState::default(),
             stats: crate::ui::stats::StatsState::default(),
             subs: crate::ui::subs::SubsState::default(),
+            pet: crate::ui::pet::PetState::default(),
         };
         s.subs.load(&s.conn);
         s.habits.load(&s.conn, s.today);

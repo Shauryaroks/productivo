@@ -1,0 +1,94 @@
+# productivo — handover
+
+Personal TUI productivity dashboard. Rust + ratatui 0.29 + crossterm + rusqlite.
+Owner: shaurya. Terminal: kitty on Wayland (truecolor works, used heavily).
+
+## Golden rule
+
+**Never touch the saved data.** Everything lives in `~/.local/share/productivo/dash.db`
+(todos, habits, ideas, events, pomodoros, subs). The owner has ~41 completed focus
+sessions banked — losing them resets the pet. Never edit an already-shipped migration
+in place; always add a new `user_version` step (this bit us once: v2 was edited after
+the user ran it, silently breaking subs queries until v3 fixed it with `ALTER TABLE`).
+
+## Build & run
+
+```sh
+cargo build --release && ./target/release/productivo
+cargo test          # includes migration test (user_version == 3, 7 tables) + parse_sub tests
+```
+
+The owner usually keeps a live instance open — after changes, remind them to
+restart it or "nothing changed". Also: below **110 columns** the home screen uses a
+narrow fallback layout, which has confused "where's my feature" debugging before.
+
+## Layout (src/ui/home.rs)
+
+Wide (≥110 cols): bento grid — left rail (habits / pomodoro Length(8) / ideas),
+center (aurora strip Length(8) / todos / subs, equal Fill), right (calendar Length(16)
+/ stats-pet). Narrow: 2×3 grid + full-width subs strip on the bottom (Fill(3)/Fill(1)).
+Slot sizing hardcodes the default panel order (`ponytail:` comments mark the spots).
+
+Subs is a **virtual 7th focus slot**: it's not in `config.panels`; `app.active_module()`
+returns `Screen::Subs` when `focus >= panels.len()`, Tab cycles `panels.len() + 1`,
+`7` jumps to it. Bottom bar shows per-panel key hints via `panel_hint()` in home.rs.
+
+## Modules
+
+- **subs.rs** — SUBS & TOOLS strip. Two kinds in one flat list: `◆` subscriptions,
+  `⚒` manually-tracked Arch tools. `parse_sub` pops up to 2 trailing numbers off the
+  input (price, then renew day 1–31); `y`/`yr`/`yearly` token anywhere → yearly
+  (divided by 12 in the monthly total). Keys: a add sub, t add tool, d delete, j/k.
+  No edit key — delete and re-add.
+- **pet.rs** — productivity pet in the stats slot. Real GIFs (assets/nyan.gif,
+  assets/pikachu.gif) embedded via `include_bytes!`, decoded once into an `OnceLock`,
+  drawn as half-block pixels (`▀` fg=top px, bg=bottom px, truecolor). Levels: 1 level
+  per 5 completed focus sessions all-time. Fed = ≥1 focus session today; hungry =
+  half-speed animation + "meow~" bubble (always full color — grayscale was rejected).
+  Image takes ~75% of free rows, centered. Health (sessions last 7d × 10) and
+  happiness badge overlay top-right. Keys (handled in stats.rs): p pet, b boop,
+  c cycle skin. Skin choice is in-memory only.
+- **stats.rs** — panel ≥12 rows tall renders the pet (12, not higher, so font-zoom
+  doesn't hide the cat); smaller panels show a 3-line summary. Zoomed screen: pet +
+  todo velocity + week review. Heatmap/focus-by-project code is parked behind
+  `#[allow(dead_code)]` — deliberately kept deletable/restorable.
+- **pomodoro.rs** — big 3×5 block-digit clock when the panel is ≥17 wide / ≥6 tall,
+  horizontally + vertically centered. Durations configurable in-app; sound on timer end.
+- **calendar.rs** — month grid stretched to fill width (`cell_w = width/7 clamp 3..7`),
+  weekends peach-tinted.
+
+## Database (src/db.rs)
+
+Migrations via `PRAGMA user_version`: v1 base tables, v2 `subs` table, v3 adds
+`cycle TEXT DEFAULT 'monthly'` to subs. `pomodoro_completed_total()` /
+`pomodoro_completed_since()` feed the pet. Debug data directly with
+`sqlite3 ~/.local/share/productivo/dash.db` — done several times this session.
+
+## Testing changes visually
+
+tmux, not guesswork:
+
+```sh
+tmux new-session -d -s prodtest -x 130 -y 40 -c /home/shaurya/Projects/productivo './target/release/productivo'
+tmux capture-pane -t prodtest -p        # add -e to verify truecolor escape codes
+tmux send-keys -t prodtest q            # quit cleanly, then kill-session
+```
+
+Capture at both 130×40 (wide) and 80×24 (narrow fallback). To test fed-state pet
+animation: insert a fake completed pomodoro row, capture, **delete it and verify the
+count is back** (baseline was 41).
+
+## Style
+
+Ponytail mode: minimal diffs, stdlib first, deliberate shortcuts marked with
+`ponytail:` comments naming the ceiling and upgrade path. Grep for `ponytail:` to
+find every deferred decision.
+
+## Current state / open items
+
+- **Everything is uncommitted** — Cargo.toml/lock, src changes, new assets/. One
+  session's worth of work (subs module, pet-as-GIF, layout, hints, centering).
+  Owner hasn't approved a commit yet.
+- Deferred (all marked in code): persist pet skin across restarts; subs edit key;
+  kirby skin removed "for now"; parked heatmap/focus code; hardcoded layout slots
+  assume default panel order.

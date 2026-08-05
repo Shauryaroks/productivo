@@ -1,5 +1,9 @@
+use std::io::Cursor;
+use std::sync::OnceLock;
+
+use image::{imageops, AnimationDecoder, RgbaImage};
 use ratatui::layout::Rect;
-use ratatui::style::{Modifier, Style};
+use ratatui::style::{Color, Modifier, Style};
 use ratatui::text::{Line, Span};
 use ratatui::widgets::Paragraph;
 use ratatui::Frame;
@@ -8,6 +12,23 @@ use crate::app::App;
 
 /// Completed focus sessions needed per level.
 const PER_LEVEL: u32 = 5;
+/// How long a pet/boop reaction plays, in frames (~100ms each).
+const REACT_FRAMES: usize = 30;
+
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub enum Reaction {
+    Pet,
+    Boop,
+}
+
+#[derive(Default)]
+pub struct PetState {
+    pub reaction: Option<Reaction>,
+    pub reacted_at: usize,
+    /// Index into SKINS; `c` cycles it.
+    /// ponytail: in-memory only — persist to config/db if the reset-on-restart annoys.
+    pub skin: usize,
+}
 
 fn stage(level: u32) -> &'static str {
     match level {
@@ -18,9 +39,77 @@ fn stage(level: u32) -> &'static str {
     }
 }
 
-/// The productivity pet: eats when a focus session completes (hungry until the
-/// first one of the day), levels up every PER_LEVEL sessions all-time. State is
-/// fully derived from the pomodoros table — no storage of its own.
+/// (name, gif bytes, frame-advance divisor — bigger = slower animation).
+const SKINS: [(&str, &[u8], usize); 2] = [
+    ("nyan", include_bytes!("../../assets/nyan.gif"), 1),
+    ("pikachu", include_bytes!("../../assets/pikachu.gif"), 1),
+];
+
+pub const SKIN_COUNT: usize = SKINS.len();
+
+/// All skins embedded at build time, decoded once on first use.
+static FRAMES: OnceLock<Vec<Vec<RgbaImage>>> = OnceLock::new();
+
+fn frames(skin: usize) -> &'static [RgbaImage] {
+    let all = FRAMES.get_or_init(|| {
+        SKINS
+            .iter()
+            .map(|(_, bytes, _)| {
+                image::codecs::gif::GifDecoder::new(Cursor::new(*bytes))
+                    .and_then(|d| d.into_frames().collect_frames())
+                    .map(|fs| fs.into_iter().map(|f| f.into_buffer()).collect())
+                    .unwrap_or_default()
+            })
+            .collect()
+    });
+    &all[skin % SKINS.len()]
+}
+
+/// Draw an RGBA image as half-block "pixels": each cell is ▀ with fg = top
+/// pixel and bg = bottom pixel, i.e. 2 vertical pixels per terminal cell.
+fn halfblock_lines(img: &RgbaImage, cell_w: u16, cell_h: u16) -> Vec<Line<'static>> {
+    let (tw, th) = (cell_w as u32, cell_h as u32 * 2);
+    let scale = f64::min(tw as f64 / img.width() as f64, th as f64 / img.height() as f64);
+    let w = ((img.width() as f64 * scale) as u32).max(1);
+    let h = ((img.height() as f64 * scale) as u32).max(1);
+    let small = imageops::resize(img, w, h, imageops::FilterType::Nearest);
+
+    let pad = " ".repeat(((cell_w as usize).saturating_sub(w as usize)) / 2);
+    let px = |x: u32, y: u32| -> Option<Color> {
+        if y >= h {
+            return None;
+        }
+        let p = small.get_pixel(x, y).0;
+        if p[3] < 128 {
+            return None;
+        }
+        Some(Color::Rgb(p[0], p[1], p[2]))
+    };
+
+    (0..h.div_ceil(2))
+        .map(|row| {
+            let mut spans = vec![Span::raw(pad.clone())];
+            for x in 0..w {
+                let top = px(x, row * 2);
+                let bot = px(x, row * 2 + 1);
+                spans.push(match (top, bot) {
+                    (Some(t), Some(b)) => {
+                        Span::styled("▀", Style::default().fg(t).bg(b))
+                    }
+                    (Some(t), None) => Span::styled("▀", Style::default().fg(t)),
+                    (None, Some(b)) => Span::styled("▄", Style::default().fg(b)),
+                    (None, None) => Span::raw(" "),
+                });
+            }
+            Line::from(spans)
+        })
+        .collect()
+}
+
+/// The productivity pet — the actual nyan cat GIF rendered in half-block
+/// pixels. Flies while fed (a focus session completed today), sits grounded
+/// and grayscale while hungry. `p` pets, `b` boops; levels come from
+/// completed focus sessions all-time.
 pub fn render(f: &mut Frame, app: &mut App, area: Rect, focused: bool) {
     let t = app.theme;
     let total = crate::db::pomodoro_completed_total(&app.conn).unwrap_or(0);
@@ -28,65 +117,158 @@ pub fn render(f: &mut Frame, app: &mut App, area: Rect, focused: bool) {
     let progress = total % PER_LEVEL;
     let fed_today = app.pomodoro.today_count > 0;
 
-    let block = t.panel_block(&format!("PET · lv{level} {}", stage(level)), focused);
+    let skin = app.pet.skin % SKINS.len();
+    let block = t.panel_block(
+        &format!("PET · lv{level} {} · {}", stage(level), SKINS[skin].0),
+        focused,
+    );
     let inner = block.inner(area);
     f.render_widget(block, area);
-    if inner.width < 16 || inner.height < 7 {
+    if inner.width < 20 || inner.height < 7 {
         return;
     }
 
-    // Blink every ~3s; happy eyes once fed today.
-    let blink = app.frame % 30 < 3;
-    let eyes = if blink {
-        "-.-"
-    } else if fed_today {
-        "^.^"
+    let fr = app.frame;
+    if app
+        .pet
+        .reaction
+        .is_some_and(|_| fr.wrapping_sub(app.pet.reacted_at) >= REACT_FRAMES)
+    {
+        app.pet.reaction = None;
+    }
+    let reacting = app.pet.reaction;
+
+    let all = frames(skin);
+    // Always full color; hunger only shows as a slower, mopier animation
+    // plus the meow bubble and the status line.
+    let div = SKINS[skin].2 * if fed_today { 1 } else { 2 };
+    let img = if all.is_empty() {
+        None
     } else {
-        "o.o"
+        Some(&all[(fr / div) % all.len()])
     };
-    let tail = if (app.frame / 8) % 2 == 0 { "^" } else { "~" };
-    // Pace back and forth across the panel (triangle wave over the frame counter).
-    let span_w = inner.width.saturating_sub(10) as usize;
-    let period = (span_w.max(1)) * 2;
-    let ph = (app.frame / 4) % period;
-    let x = if ph < span_w { ph } else { period - ph };
-    let pad = " ".repeat(x);
+
+    // Health: focus sessions across the last 7 days (10/week = full bar).
+    // Happiness: being fed today, plus a live boost while being petted.
+    // ponytail: derived on the fly each frame; cache if it ever shows in profiling.
+    let sessions_7d = crate::db::pomodoro_completed_since(
+        &app.conn,
+        app.today - chrono::Duration::days(6),
+    )
+    .unwrap_or(0);
+    let health = (sessions_7d * 10).min(100);
+    let happiness =
+        (40 + if fed_today { 40 } else { 0 } + if reacting.is_some() { 20 } else { 0 }).min(100u32);
+    let bubble = match reacting {
+        Some(Reaction::Pet) => Some((
+            if (fr / 5) % 2 == 0 {
+                "♥ purr~ ♥"
+            } else {
+                " ♥purr~ ♥ "
+            },
+            t.red,
+        )),
+        Some(Reaction::Boop) => Some(("mrrp!", t.accent)),
+        None if !fed_today && fr % 60 < 18 => Some(("meow~", t.muted)),
+        None => None,
+    };
+
+    // 1 bubble row on top, image in the middle, 2 text rows pinned at the
+    // bottom of the panel. The pet takes ~75% of the free rows and floats
+    // centered, so it scales with the panel instead of dominating it.
+    let text_rows = 2u16;
+    let avail = inner.height - 1 - text_rows;
+    let img_h = (avail * 3 / 4).max(4);
+
+    let mut lines: Vec<Line> = Vec::new();
+    lines.push(match bubble {
+        Some((text, color)) => Line::styled(
+            format!(
+                "{:^width$}",
+                text,
+                width = inner.width as usize
+            ),
+            Style::default().fg(color),
+        ),
+        None => Line::raw(""),
+    });
+    match img {
+        Some(img) => {
+            let mut art = halfblock_lines(img, inner.width, img_h);
+            let pad_top = (avail as usize).saturating_sub(art.len()) / 2;
+            for _ in 0..pad_top {
+                lines.push(Line::raw(""));
+            }
+            lines.append(&mut art);
+        }
+        None => lines.push(Line::styled(
+            format!(" assets/{}.gif failed to decode", SKINS[skin].0),
+            Style::default().fg(t.red),
+        )),
+    }
+    while (lines.len() as u16) < inner.height - text_rows {
+        lines.push(Line::raw(""));
+    }
+    lines.truncate((inner.height - text_rows) as usize);
 
     let bar: String = (0..PER_LEVEL)
         .map(|i| if i < progress { '▰' } else { '▱' })
         .collect();
-    let lines = vec![
-        Line::styled(format!("{pad}   /\\_/\\"), Style::default().fg(t.peach)),
-        Line::styled(format!("{pad}  ( {eyes} )"), Style::default().fg(t.peach)),
-        Line::styled(format!("{pad}   > {tail} <"), Style::default().fg(t.peach)),
-        Line::raw(""),
-        Line::from(vec![
-            Span::styled(
-                format!(" lv{level} "),
-                Style::default().fg(t.text).add_modifier(Modifier::BOLD),
-            ),
-            Span::styled(bar, Style::default().fg(t.green)),
-            Span::styled(
-                format!(" {progress}/{PER_LEVEL} to lv{}", level + 1),
-                Style::default().fg(t.muted),
-            ),
-        ]),
-        Line::styled(
-            if fed_today {
-                format!(" fed today · {total} sessions all-time")
-            } else {
-                " hungry — finish a focus session to feed".to_string()
-            },
-            Style::default().fg(if fed_today { t.green } else { t.yellow }),
+    lines.push(Line::from(vec![
+        Span::styled(
+            format!(" lv{level} "),
+            Style::default().fg(t.text).add_modifier(Modifier::BOLD),
         ),
-    ];
-    // Center the little scene vertically in whatever the slot gives us.
-    let h = lines.len() as u16;
-    let content = Rect {
-        x: inner.x,
-        y: inner.y + inner.height.saturating_sub(h) / 2,
-        width: inner.width,
-        height: h.min(inner.height),
+        Span::styled(bar, Style::default().fg(t.green)),
+        Span::styled(
+            format!(" {progress}/{PER_LEVEL} to lv{}", level + 1),
+            Style::default().fg(t.muted),
+        ),
+    ]));
+    lines.push(Line::styled(
+        if fed_today {
+            format!(" fed today · {total} sessions all-time")
+        } else {
+            " hungry — finish a focus session to feed".to_string()
+        },
+        Style::default().fg(if fed_today { t.green } else { t.yellow }),
+    ));
+
+    f.render_widget(Paragraph::new(lines), inner);
+
+    // Health/happiness badge, drawn last so it sits on top at the top-right.
+    let pct_color = |v: u32| {
+        if v >= 67 {
+            t.green
+        } else if v >= 34 {
+            t.yellow
+        } else {
+            t.red
+        }
     };
-    f.render_widget(Paragraph::new(lines), content);
+    let stats_w = 10u16;
+    if inner.width > stats_w + 4 {
+        let stats_area = Rect {
+            x: inner.x + inner.width - stats_w,
+            y: inner.y,
+            width: stats_w,
+            height: 2,
+        };
+        f.render_widget(
+            Paragraph::new(vec![
+                Line::from(vec![
+                    Span::styled("♥ ", Style::default().fg(t.red)),
+                    Span::styled(format!("{health:>3}%"), Style::default().fg(pct_color(health))),
+                ]),
+                Line::from(vec![
+                    Span::styled("☺ ", Style::default().fg(t.peach)),
+                    Span::styled(
+                        format!("{happiness:>3}%"),
+                        Style::default().fg(pct_color(happiness)),
+                    ),
+                ]),
+            ]),
+            stats_area,
+        );
+    }
 }

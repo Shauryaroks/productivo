@@ -398,7 +398,12 @@ pub fn render_panel(f: &mut Frame, app: &mut App, area: Rect, focused: bool) {
     if inner.height >= 6 && inner.width >= 17 {
         let mut lines = big_clock_lines(&format!("{mm:02}:{ss:02}"), active_color(app));
         lines.push(Line::styled(status, Style::default().fg(app.theme.text)));
-        f.render_widget(Paragraph::new(lines).block(block), area);
+        // Vertical centering: pad the top so clock+status sit mid-panel.
+        let pad = (inner.height as usize).saturating_sub(lines.len()) / 2;
+        for _ in 0..pad {
+            lines.insert(0, Line::raw(""));
+        }
+        f.render_widget(Paragraph::new(lines).centered().block(block), area);
         return;
     }
 

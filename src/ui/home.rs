@@ -118,7 +118,7 @@ fn panel_hint(app: &App) -> String {
             " s start · space pause · x abandon · +/- focus {}m · [/] break {}m",
             app.config.pomodoro.focus_min, app.config.pomodoro.break_min
         ),
-        Screen::Stats => " r range".into(),
+        Screen::Stats => " p pet · b boop · c skin · r range".into(),
         Screen::Subs => " a add sub · t add tool · d delete".into(),
         Screen::Home => String::new(),
     };
