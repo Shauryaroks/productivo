@@ -2,6 +2,13 @@
 name = "productivo"
 version = "0.1.0"
 edition = "2021"
+description = "A single-binary terminal productivity dashboard: habits, todos, calendar, ideas, pomodoro, and a pixel pet that levels up with your focus sessions"
+license = "MIT"
+repository = "https://github.com/Shauryaroks/productivo"
+readme = "README.md"
+keywords = ["tui", "productivity", "pomodoro", "habits", "dashboard"]
+categories = ["command-line-utilities"]
+exclude = ["HANDOVER.md", "assets/make_skins.py"]
 
 [dependencies]
 ratatui = "0.29"

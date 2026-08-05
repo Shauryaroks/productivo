@@ -5,8 +5,36 @@ ideas, pomodoro, and stats — one glanceable home screen, zoom into any panel
 with vim-ish keys. No server, no accounts: everything lives in a local
 SQLite file.
 
-<!-- screenshot TODO -->
-<!-- TODO: replace with a real screenshot of the home grid -->
+```text
+╭ HABITS 0/4 ───────────────╮                 ···:::~~~~~~~~~:::·····     ···  ╭ AUG 2026 ─────────────────────────────╮
+│ ○ gym                     │~::::····  ···::~~≈≈▒▒▓▓▓▓▓▓▓▓▓▓▓▓▒▒▒▒≈≈≈≈≈≈≈≈≈~~~│   Mo   Tu   We   Th   Fr   Sa   Su    │
+│ ○ read 30m                │▓▓▓▒▒▒≈≈≈≈≈≈≈▒▒▓▓██████▓▓▓▓▓▓█████████████████████│   27   28   29   30   31    1    2    │
+│ ○ meditate                │████████████████████▓▓▒▒▒▒▒▓▓▓████████████████████│                                       │
+│ ○ no sugar                │██████████████████████████████████████████████████│    3    4    5    6    7    8    9    │
+╰───────────────────────────╯██████████████████████████████████████████████████│                        •              │
+╭ POMODORO ─────────────────╮███████████████████████████████████▓▓▒▒≈≈≈≈≈≈≈▒▒▓▓│   10   11   12   13   14   15   16    │
+│     ███ ███   ███ ███     │╭ TODOS (3) ─────────────────────────────────────╮│                                       │
+│       █ █   █ █ █ █ █     ││ ◉ ship v0.1.0  #productivo                     ││   17   18   19   20   21   22   23    │
+│     ███ ███   █ █ █ █     ││ ○ write launch post  #productivo               ││   24   25   26   27   28   29   30    │
+│     █     █ █ █ █ █ █     ││ ○ water the plants                             ││                                       │
+│     ███ ███   ███ ███     ││                                                ││   31    1    2    3    4    5    6    │
+│ 0 done today · s to start ││                                                ││                                       │
+╰───────────────────────────╯│                                                │╰───────────────────────────────────────╯
+╭ IDEAS (2) ────────────────╮│                                                │╭ PET · lv2 kitten · comet ─────────────╮
+│ ◌ weekly email digest     ││                                                ││                             ♥  60%    │
+│ ✦ terminal screensaver mod││                                                ││                             ☺  40%    │
+│    aquarium when idle     │╰────────────────────────────────────────────────╯│▄▄▄▄    ▄▄▄▄    ▄▄▄                    │
+│                           │╭ SUBS & TOOLS · 205/mo ─────────────────────────╮│▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀           ▀▄   ▄▀  │
+│                           ││ ◆ domain name  900/y · d1                      ││▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▄▄▀▀▀▀▀▀▀▄ │
+│                           ││ ◆ google one  130 · d15                        ││▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀ │
+│                           ││ ⚒ obsidian                                     ││▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀ │
+│                           ││ ⚒ ripgrep                                      ││▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀  ▀▀▀  ▀▀▀  ▀▀▀ ▀▀▀ │
+│                           ││                                                ││ lv2 ▰▰▱▱▱ 2/5 to lv3                  │
+╰───────────────────────────╯╰────────────────────────────────────────────────╯╰───────────────────────────────────────╯
+ space check · a add · d archive · J/K reorder · y yesterday · tab next · enter zoom · q quit
+```
+
+(It's much prettier in color — Catppuccin theme, truecolor pet, aurora strip.)
 
 ## Install
 
@@ -25,7 +53,7 @@ are attached to each [GitHub release](../../releases).
 |-----------|--------------------------------------|
 | `Tab` / `Shift+Tab` | Move focus between home panels |
 | `Enter`   | Zoom into the focused panel          |
-| `1`–`6`   | Jump straight to a panel by position |
+| `1`–`7`   | Jump straight to a panel by position (`7` = subs) |
 | `Esc`     | Back to the home screen              |
 | `q`       | Quit                                 |
 
@@ -90,11 +118,30 @@ Startup defaults live in `config.toml` (`[pomodoro] focus_min / break_min`),
 and `sound = "/path/to/chime.wav"` plays a sound file when a timer ends
 (via `paplay`/`pw-play`/`aplay`/`afplay`; unset = terminal bell).
 
-### Stats
+### Subs & Tools
+
+Track subscriptions (`◆`) and manually-noted CLI tools/packages (`⚒`) in one
+strip, with a monthly total in the title.
 
 | Key | Action |
 |-----|--------|
-| `r` | Cycle range (week → month → year) |
+| `a` | Add a subscription — `name [price] [renew day]`, add `y`/`yearly` for annual billing |
+| `t` | Add a tool |
+| `d` | Delete the selected entry |
+
+### Stats & Pet
+
+The stats slot is home to a pixel pet that levels up as you complete focus
+sessions (1 level per 5). It's fed by finishing at least one session a day —
+hungry pets mope at half speed. Needs a truecolor terminal (kitty, wezterm,
+foot, alacritty, most modern ones).
+
+| Key | Action |
+|-----|--------|
+| `p` | Pet it |
+| `b` | Boop it |
+| `c` | Cycle skins (comet / toast) |
+| `r` | Cycle stats range (week → month → year) |
 
 ## Config
 
