@@ -162,7 +162,7 @@ pub fn render(f: &mut Frame, app: &mut App, area: Rect, focused: bool) {
         (40 + if fed_today { 40 } else { 0 } + if reacting.is_some() { 20 } else { 0 }).min(100u32);
     let bubble = match reacting {
         Some(Reaction::Pet) => Some((
-            if (fr / 5) % 2 == 0 {
+            if (fr / 5).is_multiple_of(2) {
                 "♥ purr~ ♥"
             } else {
                 " ♥purr~ ♥ "
