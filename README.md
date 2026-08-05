@@ -5,36 +5,14 @@ ideas, pomodoro, and stats — one glanceable home screen, zoom into any panel
 with vim-ish keys. No server, no accounts: everything lives in a local
 SQLite file.
 
-```text
-╭ HABITS 0/4 ───────────────╮                 ···:::~~~~~~~~~:::·····     ···  ╭ AUG 2026 ─────────────────────────────╮
-│ ○ gym                     │~::::····  ···::~~≈≈▒▒▓▓▓▓▓▓▓▓▓▓▓▓▒▒▒▒≈≈≈≈≈≈≈≈≈~~~│   Mo   Tu   We   Th   Fr   Sa   Su    │
-│ ○ read 30m                │▓▓▓▒▒▒≈≈≈≈≈≈≈▒▒▓▓██████▓▓▓▓▓▓█████████████████████│   27   28   29   30   31    1    2    │
-│ ○ meditate                │████████████████████▓▓▒▒▒▒▒▓▓▓████████████████████│                                       │
-│ ○ no sugar                │██████████████████████████████████████████████████│    3    4    5    6    7    8    9    │
-╰───────────────────────────╯██████████████████████████████████████████████████│                        •              │
-╭ POMODORO ─────────────────╮███████████████████████████████████▓▓▒▒≈≈≈≈≈≈≈▒▒▓▓│   10   11   12   13   14   15   16    │
-│     ███ ███   ███ ███     │╭ TODOS (3) ─────────────────────────────────────╮│                                       │
-│       █ █   █ █ █ █ █     ││ ◉ ship v0.1.0  #productivo                     ││   17   18   19   20   21   22   23    │
-│     ███ ███   █ █ █ █     ││ ○ write launch post  #productivo               ││   24   25   26   27   28   29   30    │
-│     █     █ █ █ █ █ █     ││ ○ water the plants                             ││                                       │
-│     ███ ███   ███ ███     ││                                                ││   31    1    2    3    4    5    6    │
-│ 0 done today · s to start ││                                                ││                                       │
-╰───────────────────────────╯│                                                │╰───────────────────────────────────────╯
-╭ IDEAS (2) ────────────────╮│                                                │╭ PET · lv2 kitten · comet ─────────────╮
-│ ◌ weekly email digest     ││                                                ││                             ♥  60%    │
-│ ✦ terminal screensaver mod││                                                ││                             ☺  40%    │
-│    aquarium when idle     │╰────────────────────────────────────────────────╯│▄▄▄▄    ▄▄▄▄    ▄▄▄                    │
-│                           │╭ SUBS & TOOLS · 205/mo ─────────────────────────╮│▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀           ▀▄   ▄▀  │
-│                           ││ ◆ domain name  900/y · d1                      ││▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▄▄▀▀▀▀▀▀▀▄ │
-│                           ││ ◆ google one  130 · d15                        ││▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀ │
-│                           ││ ⚒ obsidian                                     ││▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀ │
-│                           ││ ⚒ ripgrep                                      ││▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀  ▀▀▀  ▀▀▀  ▀▀▀ ▀▀▀ │
-│                           ││                                                ││ lv2 ▰▰▱▱▱ 2/5 to lv3                  │
-╰───────────────────────────╯╰────────────────────────────────────────────────╯╰───────────────────────────────────────╯
- space check · a add · d archive · J/K reorder · y yesterday · tab next · enter zoom · q quit
-```
+![home screen — bento grid with habits, pomodoro, ideas, aurora strip, todos, subs, calendar, and the pet](https://raw.githubusercontent.com/Shauryaroks/productivo/main/docs/media/home.svg)
 
-(It's much prettier in color — Catppuccin theme, truecolor pet, aurora strip.)
+<details>
+<summary>Zoomed stats screen with the pet</summary>
+
+![stats screen — pet, todo velocity sparklines, week review](https://raw.githubusercontent.com/Shauryaroks/productivo/main/docs/media/stats.svg)
+</details>
+
 
 ## Install
 
